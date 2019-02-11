@@ -1,6 +1,6 @@
 
 #include "dnsserver.h"
-
+#include "logging.h"
 
 #include <unistd.h>
 #include <cctype>
@@ -66,9 +66,6 @@ namespace utils
 
     print_able::~print_able() {}
 
-
-    //lostream
-
 }  // namespace utils
 
 void ip_address::to_string(string &buffer) const
@@ -84,3 +81,34 @@ void ip_address::to_string(string &buffer) const
     }
     buffer.erase(buffer.length() - 1);
 }
+
+namespace logging
+{
+    void set_default_level(log_level ll)
+    {
+        auto level = spdlog::level::debug;
+        switch (ll) {
+            case utils::LL_TRACE:
+                level = spdlog::level::debug;
+                break;
+            case utils::LL_ERROR:
+                level = spdlog::level::err;
+                break;
+            case utils::LL_WARNING:
+                level = spdlog::level::warn;
+                break;
+            case utils::LL_INFO:
+                level = spdlog::level::info;
+                break;
+            case utils::LL_OFF:
+                level = spdlog::level::off;
+                break;
+
+            default:
+                level = spdlog::level::info;
+                break;
+        }
+        spdlog::set_level(level);
+    }
+
+}  // namespace logging

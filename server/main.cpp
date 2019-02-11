@@ -3,8 +3,6 @@
 #include "dnsserver.h"
 #include "server.h"
 
-#include "glog/logging.h"
-
 using namespace dns;
 
 void atexit_handler();
@@ -37,7 +35,7 @@ void uv_handler_on_recv(
     sem_post(queue_sem);
     pthread_spin_unlock(queue_lock);
 
-    LOG(WARNING) << "RECV CALLED.";
+    DEBUG("RECV CALLED.");
 }
 
 void atexit_handler()
@@ -48,14 +46,7 @@ void atexit_handler()
 
 int main(int argc, CH* const argv[])
 {
-#ifndef NDEBUG
-    FLAGS_logtostderr      = 1;
-    FLAGS_colorlogtostderr = 1;
-#endif
-
-    google::InitGoogleLogging(argv[0]);
     utils::config_system(argc, argv);
-
     auto& server = global_server::get_server();
     server.init_server();
     server.start_server_loop();

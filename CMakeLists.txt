@@ -6,7 +6,6 @@ PROJECT(dns)
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
 SET(WXCC_INCLUDE_ROOT ${CMAKE_SOURCE_DIR}/include/)
 
-
 SET(CMAKE_CXX_STANDARD 14)
 SET(PROJECT_NAME dns)
 SET(PROJECT_VERSION 0.0.0)
@@ -26,8 +25,7 @@ ELSE()
 ENDIF()
 
 
-INCLUDE(Glog)
-INCLUDE(Gtest)
+INCLUDE(Spdlog)
 INCLUDE(CompilerOptionCheck)
 INCLUDE(ConfigCheck)
 INCLUDE(FindLibuv)
@@ -80,16 +78,18 @@ ENDIF()
 CONFIGURE_FILE(${WXCC_INCLUDE_ROOT}/config.h.in
   ${WXCC_INCLUDE_ROOT}/config.h)
 
-TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${WXCC_LIBS} pthread libglog)
+TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${WXCC_LIBS} pthread)
 #test below
 
+
+INCLUDE(Gtest)
 
 IF(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
   ADD_DEFINITIONS(-Wno-c++98-compat)
   ADD_DEFINITIONS(-Wno-c++98-compat-pedantic)
   ADD_DEFINITIONS(-Wno-c++98-compat-extra-semi)
   ADD_DEFINITIONS(-Wno-weak-vtables)
- # ADD_DEFINITIONS(-Wno-everythings)
+  # ADD_DEFINITIONS(-Wno-everythings)
   ADD_DEFINITIONS(-Wno-global-constructors)
 ENDIF()
 

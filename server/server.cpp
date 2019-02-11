@@ -2,16 +2,13 @@
 #include "server.h"
 #include "dns.h"
 #include "dnsserver.h"
-
-#include "glog/logging.h"
-using namespace google;
+#include "logging.h"
 
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <cstring>
 #include <iostream>
-
 
 global_server* global_server::server_instance = nullptr;
 
@@ -22,14 +19,12 @@ void global_server::add_remote_address(uint32_t ip)
     for (auto& ns : remote_address) {
         if (ns == ip) {
             //TODO nameserver exists. Here should have a warning
-            DLOG(INFO) << "exists.";
+            INFO("exists.");
             return;
         }
     }
 
     remote_address.emplace_back(ip);
-    string str;
-    DLOG(INFO) << "add remote nameserver ";
 }
 
 void global_server::set_log_file(const CH* path)
@@ -37,7 +32,7 @@ void global_server::set_log_file(const CH* path)
     log_file = path;
     int fd   = open(path, O_WRONLY | O_APPEND | O_CREAT);
     if (fd == -1) {
-        DLOG(ERROR) << "Open log file " << path << " failed: " << strerror(errno);
+        ERROR("Open log file {0} failed: {1}", path, strerror(errno));
         return;
     } else {
         //utils::lostream::set_dest(fd);
@@ -48,7 +43,7 @@ void global_server::init_server_loop()
 {
     const static auto check = [=](int st, const char* when) {
         if (st < 0) {
-            DLOG(ERROR) << when << " error: " << uv_strerror(st);
+            ERROR("error in libuv when {0}: {1}", when, uv_strerror(st));
             exit(0);
         }
     };
@@ -59,11 +54,17 @@ void global_server::init_server_loop()
 
     check(status, "uv init");
 
-    status = uv_ip4_addr("0.0.0.0", 53535, &addr);
+    const int default_port     = 53535;
+    const auto default_address = "0.0.0.0";
+
+    status = uv_ip4_addr(default_address, default_port, &addr);
     check(status, "uv set ipv4 addr");
     status =
         uv_udp_bind(&server_socket, reinterpret_cast<struct sockaddr*>(&addr), UV_UDP_REUSEADDR);
     check(status, "bind");
+    if (status == 0) {
+        INFO("bind success on {0}:{1}", default_address, default_port);
+    }
     status = uv_udp_recv_start(&server_socket, uv_handler_on_alloc, uv_handler_on_recv);
     check(status, "recv start");
 }
@@ -115,6 +116,11 @@ global_server::~global_server()
     }
 }
 
+void global_server::set_server_log_level(utils::log_level ll)
+{
+    logging::set_default_level(ll);
+}
+
 void* work_thread_fn(void*)
 {
     static auto& server     = global_server::get_server();
@@ -131,7 +137,7 @@ void* work_thread_fn(void*)
         pthread_spin_unlock(queue_lock);
         auto name = item->getQuery().getName();
         auto id   = item->getQueryID();
-        VLOG(INFO) << name << " " << id;
+        DEBUG("Input DNS Request:  ID #{0:x} -> {1}", id, name);
         // hash::hash_entry<const char*>* entry;
         // bool found = htable.get(name, *entry);
         // if (found) {

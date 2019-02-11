@@ -4,14 +4,15 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-#include <queue>
 
 #include "dns.h"
 #include "dnsserver.h"
 #include "hash.h"
+#include "logging.h"
 
 #include <pthread.h>
 #include <semaphore.h>
+#include <queue>
 
 
 void *work_thread_fn(void *);
@@ -135,10 +136,7 @@ public:
     void add_remote_address(const ip_address &);
     void add_remote_address(uint32_t);
 
-    void set_server_log_level(utils::log_level ll)
-    {
-        //   utils::lostream::set_server_log_level(ll);
-    }
+    void set_server_log_level(utils::log_level);
 
     const std::vector<ip_address> get_remote_server() const
     {

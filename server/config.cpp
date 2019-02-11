@@ -1,18 +1,15 @@
 
 #include "config_file.h"
 #include "dnsserver.h"
+#include "logging.h"
 #include "server.h"
-
-#include "glog/logging.h"
-
-using namespace google;
 
 #include <getopt.h>
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
+#include <iostream>
 #include <string>
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #else
@@ -27,16 +24,17 @@ namespace
 {
     [[noreturn]] void usage()
     {
-        VLOG(INFO) << "Usage: " PROJECT_NAME << " <config file>.";
+        std::cerr << "Usage: " PROJECT_NAME << " <config file>.";
         exit(1);
     }
+
     void register_nameserver(global_server& server, const CH* ip)
     {
         uint32_t ns_address;
         if (check_ip_address(ip, ns_address)) {
             server.add_remote_address(ns_address);
         } else {
-            DLOG(ERROR) << "invalid IP address in " << ip;
+            ERROR("invalid IP address in {0} ", ip);
         }
     }
 
@@ -54,12 +52,11 @@ namespace
         ACCEPT
     };
 
-#define CHECK_STATE(ns)                                                                  \
-    if (state != config_parse_state::BEGIN) {                                            \
-        DLOG(ERROR) << "config file error: un-expect token: " << yytext << " near line " \
-                    << yylineno;                                                         \
-    }                                                                                    \
-    state = config_parse_state::ns;                                                      \
+#define CHECK_STATE(ns)                                                                        \
+    if (state != config_parse_state::BEGIN) {                                                  \
+        ERROR("configuration file errorL unexpect token {0} near line {1}", yytext, yylineno); \
+    }                                                                                          \
+    state = config_parse_state::ns;                                                            \
     break;
 
     void do_parse_config_file(global_server& server, FILE* fp)
@@ -79,7 +76,7 @@ namespace
                     if (state == config_parse_state::LOG_FILE) {
                         server.set_log_file(yytext);
                     } else {
-                        DLOG(ERROR) << "useless text '" << yytext << "' in line " << yylineno;
+                        ERROR("useless text '{0} in line {1}", yytext, yylineno);
                     }
                     state = config_parse_state::ACCEPT;
                     break;
@@ -88,20 +85,19 @@ namespace
                         current_domain = (yytext);
                         state          = config_parse_state::SERVER_DOMAIN_ACCEPT;
                     } else {
-                        DLOG(ERROR)
-                            << "useless domain text '" << yytext << "' in line " << yylineno;
+                        ERROR("useless domain text {0} in line {1}", yytext, yylineno);
                         state = config_parse_state::ACCEPT;
                     }
                     break;
                 case NUMBER:
                     if (state == config_parse_state::DEFAULT_TTL) {
                         int ttl = atoi(yytext);
-                        VLOG(INFO) << "set default ttl " << ttl;
+                        DEBUG("set default ttl {0}", ttl);
                         server.set_default_ttl(ttl);
                         state = config_parse_state::ACCEPT;
                     } else if (state == config_parse_state::CACHE_COUNT) {
                         int ttl = atoi(yytext);
-                        VLOG(INFO) << "set cache-size " << yytext;
+                        DEBUG("set cache-size {0}", yytext);
                         server.set_cache_size(static_cast<size_t>(ttl));
                     }
                     state = config_parse_state::ACCEPT;
@@ -113,25 +109,23 @@ namespace
                     } else if (state == config_parse_state::SERVER_DOMAIN_ACCEPT) {
                         uint32_t ip;
                         check_ip_address(yytext, ip);
-                        VLOG(INFO)
-                            << "add static address: " << current_domain.c_str() << "->" << yytext;
+                        DEBUG("add static address {0}->{1}", current_domain.c_str(), yytext);
                         server.add_static_ip(current_domain, ip);
                         state = config_parse_state::ACCEPT;
                     } else {
-                        DLOG(ERROR) << "useless IP '" << yytext << "' in line " << yylineno;
+                        ERROR("useless IP {0} in line {1}", yytext, yylineno);
                         state = config_parse_state::ACCEPT;
                     }
-
                     break;
                 case KW_ON:
                     if (state == config_parse_state::PARALLEL_QUERY) {
-                        VLOG(INFO) << "parallel-query set to ON";
+                        DEBUG("parallel-query set to ON");
                         server.set_parallel_query(true);
                     } else if (state == config_parse_state::TIMEOUT_REQUERY) {
-                        VLOG(INFO) << "timeout re-query set to ON";
+                        DEBUG("timeout re-query set to ON");
                         server.set_timeout_requery(true);
                     } else {
-                        DLOG(ERROR) << "useless directive ON in line " << yylineno;
+                        ERROR("useless directive ON in line {0}", yylineno);
                     }
                     state = config_parse_state::ACCEPT;
                     break;
@@ -139,16 +133,16 @@ namespace
                     CHECK_STATE(TIMEOUT_REQUERY);
                 case KW_OFF:
                     if (state == config_parse_state::LOG) {
-                        VLOG(INFO) << "disable log output";
+                        DEBUG("disable log output");
                         server.set_server_log_level(utils::log_level::LL_OFF);
                     } else if (state == config_parse_state::PARALLEL_QUERY) {
-                        VLOG(INFO) << "parallel-query set to OFF";
+                        DEBUG("parallel-query set to OFF");
                         server.set_parallel_query(false);
                     } else if (state == config_parse_state::TIMEOUT_REQUERY) {
-                        VLOG(INFO) << "timeout-requery set to OFF";
+                        DEBUG("timeout-requery set to OFF");
                         server.set_timeout_requery(false);
                     } else {
-                        DLOG(ERROR) << "useless directive OFF in line " << yylineno;
+                        ERROR("useless directive OFF in line {0}", yylineno);
                     }
                     state = config_parse_state::ACCEPT;
                     break;
@@ -164,10 +158,12 @@ namespace
                     CHECK_STATE(DEFAULT_TTL);
                 case KW_SERVER:
                     CHECK_STATE(SERVER);
-
+                case KW_LOG_TRACE:
+                    server.set_server_log_level(LL_TRACE);
+                    break;
                 case NEWLINE:
                     if (state != config_parse_state::ACCEPT && state != config_parse_state::BEGIN) {
-                        DLOG(ERROR) << "Config file error occured. In line: " << yylineno;
+                        ERROR("Config file error occured. In line: {0}", yylineno);
                     }
                     state = config_parse_state::BEGIN;
                     break;
@@ -188,12 +184,12 @@ void utils::config_system(int argc, CH* const argv[])
     auto cf     = argv[1];
     auto status = access(cf, R_OK);
     if (status != 0) {
-        DLOG(ERROR) << "Open configuration file " << cf << " failed: " << strerror(errno);
+        ERROR("Open configuration file {0} failed: {1}", cf, strerror(errno));
         exit(-1);
     } else {
         const auto fp = fopen(cf, "r");
         if (fp == nullptr) {
-            DLOG(ERROR) << "Open configuration file " << cf << " failed.";
+            ERROR("Open configuration file {0} failed", cf);
             exit(-1);
         }
         do_parse_config_file(server, fp);

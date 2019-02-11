@@ -5,7 +5,6 @@
 
 #include <cinttypes>
 
-#define DEBUG
 #include <cassert>
 
 namespace dns
