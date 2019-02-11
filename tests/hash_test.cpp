@@ -54,7 +54,7 @@ namespace
             delete p_cache_list_near;
         }
 
-        int size() const
+        size_t size() const
         {
             return cache_real_size_;
         }
@@ -127,9 +127,8 @@ namespace
             return true;
         }
 
-    private:
-        int cache_size_;
-        int cache_real_size_;
+        size_t cache_size_;
+        size_t cache_real_size_;
         CacheNode *p_cache_list_head;
         CacheNode *p_cache_list_near;
 
@@ -150,44 +149,40 @@ namespace
 
 }  // namespace
 
-const int rlen = 20;
+
+const int rlen = 15;
 
 TEST(hash_table, lru_test)
 {
     const int count = 2000;
-    LRUCache<const CH *, hash_entry_A> cache(count);
-    hash_table<const CH *, hash_entry_A> table(count);
+    LRUCache<const CH *, record_node_A *> cache(count);
+    hashtable table(count);
     vector<tuple<const CH *, ip_address> > vec;
 
     vec.reserve(count * 2);
-
     for (int i = 0; i < count - 1; i++) {
         auto *str = random_string(rlen);
         ip_address ip(random_value());
-        hash_entry_A entry(str, ip);
-        table.put(str, entry);
+        auto entry = new record_node_A(str, ip);
+        table.put(entry);
         cache.put(str, entry);
         vec.emplace_back(make_tuple(str, ip));
     }
 
     EXPECT_EQ(cache.size(), table.get_saved()) << cache.size();
 
-
     for (auto &iter : vec) {
-        auto &key   = std::get<0>(iter);
-        auto &value = std::get<1>(iter);
-        hash_entry_A table_the;
-        hash_entry_A cache_the;
+        auto &key                    = std::get<0>(iter);
+        const record_node *table_the = table.get(key);
+        record_node_A *cache_the;
         EXPECT_TRUE(cache.get(key, cache_the));
-        EXPECT_TRUE(table.get(key, table_the));
-        EXPECT_TRUE(cache_the == table_the);
-        EXPECT_TRUE(cache_the == value);
+        EXPECT_TRUE(table_the != nullptr);
+        EXPECT_EQ(cache.size(), table.get_saved());
     }
 
     for (int i = 0; i < count - 1; i++) {
         auto *str = random_string(rlen);
         ip_address ip(random_value());
-        hash_entry_A entry(str, ip);
         vec.emplace_back(make_tuple(str, ip));
     }
 
@@ -197,6 +192,7 @@ TEST(hash_table, lru_test)
         bool cache_exists = cache.get(key);
         bool table_exists = table.exists(key);
         EXPECT_EQ(cache_exists, table_exists);
+        EXPECT_EQ(cache.size(), table.get_saved());
     }
 
     int cycle_times = random_value() % 10000 + 5000;
@@ -205,18 +201,17 @@ TEST(hash_table, lru_test)
         auto iter   = vec[random_value() % vec.size()];
         auto &key   = std::get<0>(iter);
         auto &value = std::get<1>(iter);
-        hash_entry_A table_the;
-        hash_entry_A cache_the;
+        record_node_A *cache_the;
         bool cache_exists = cache.get(key, cache_the);
-        bool table_exists = table.get(key, table_the);
+        auto table_ptr    = dynamic_cast<record_node_A *>(table.get(key));
+        bool table_exists = table_ptr != nullptr;
         EXPECT_EQ(cache_exists, table_exists);
+        EXPECT_EQ(cache.size(), table.get_saved());
         if (cache_exists && table_exists) {
-            EXPECT_EQ(table_the, cache_the);
-            EXPECT_EQ(cache_the, value);
+            EXPECT_TRUE(*table_ptr == *cache_the);
+            EXPECT_TRUE(cache_the->operator==(value));
         }
     }
-
-    EXPECT_EQ(cache.size(), table.get_saved()) << cache.size();
 
     for (auto &iter : vec) {
         auto ptr = std::get<0>(iter);
@@ -224,12 +219,11 @@ TEST(hash_table, lru_test)
     }
 }
 
-
 TEST(hash_table, hash_test)
 {
     const int count = 3000;
 
-    hash_table<const CH *, hash_entry_A> table(count);
+    hashtable table(count);
     vector<tuple<const CH *, ip_address> > vec;
 
     vec.reserve(count);
@@ -237,19 +231,21 @@ TEST(hash_table, hash_test)
     for (int i = 0; i < count - 1; i++) {
         auto *str = random_string(rlen);
         ip_address ip(random_value());
-        hash_entry_A entry(str, ip);
-        table.put(str, entry);
+        auto entry = new record_node_A(str, ip);
+        table.put(entry);
         vec.emplace_back(make_tuple(str, ip));
+        EXPECT_EQ(vec.size(), table.get_saved());
     }
 
     table.get_saved();
 
     for (auto &iter : vec) {
-        auto &key   = std::get<0>(iter);
-        auto &value = std::get<1>(iter);
-        hash_entry_A the;
-        EXPECT_TRUE(table.get(key, the));
-        EXPECT_TRUE(the == value);
+        auto &key          = std::get<0>(iter);
+        auto &value        = std::get<1>(iter);
+        record_node_A *the = dynamic_cast<record_node_A *>(table.get(string(key)));
+        EXPECT_TRUE(the != nullptr);
+        EXPECT_TRUE(the->operator==(value));
+        EXPECT_EQ(vec.size(), table.get_saved());
     }
 
     for (int i = 0; i < 100; i++) {
@@ -260,6 +256,7 @@ TEST(hash_table, hash_test)
         });
         auto vec_exist = pos == vec.cend();
         EXPECT_EQ(!vec_exist, table.exists(p));
+        EXPECT_EQ(vec.size(), table.get_saved());
         delete[] p;
     }
 

@@ -51,17 +51,17 @@ extern "C" void yylex();
 namespace utils
 {
     template <class C>
+    size_t strlen(const C *const str)
+    {
+        return std::char_traits<C>::length(str);
+    }
+
+    template <class C>
     int strcmp(const C *const s1, const C *const s2)
     {
         auto sl1 = strlen(s1);
         auto sl2 = strlen(s2);
         return std::char_traits<C>::compare(s1, s2, sl1 > sl2 ? sl2 : sl1);
-    }
-
-    template <class C>
-    size_t strlen(const C *const str)
-    {
-        return std::char_traits<C>::length(str);
     }
 
     template <class C>

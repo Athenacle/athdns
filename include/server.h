@@ -17,17 +17,14 @@
 
 void *work_thread_fn(void *);
 
-
 class global_server
 {
-    using hash_table_type     = hash::hash_table<const char *, hash::hash_entry<const char *> >;
     using static_address_type = std::tuple<string, uint32_t>;
 
     std::vector<ip_address> remote_address;
     std::vector<static_address_type> *static_address;
     std::queue<dns::DnsPacket *> requests;
 
-    hash_table_type *hash;
 
     int total_request_count;
     int default_ttl;
@@ -57,7 +54,6 @@ class global_server
         cache_count         = 1000;
         log_file            = "";
         uv_main_loop        = nullptr;
-        hash                = nullptr;
         static_address      = nullptr;
 
         pthread_spin_init(&queue_lock, PTHREAD_PROCESS_PRIVATE);
@@ -73,12 +69,6 @@ public:
     {
         return &queue_lock;
     }
-
-    hash_table_type &get_hashtable()
-    {
-        return *hash;
-    }
-
 
     sem_t *get_semaphore()
     {

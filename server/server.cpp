@@ -69,12 +69,7 @@ void global_server::init_server_loop()
     check(status, "recv start");
 }
 
-void global_server::set_static_ip(const string& domain, uint32_t ip)
-{
-    using hash::hash_entry_A;
-    hash_entry_A new_entry_A(domain.c_str(), ip_address(ip));
-    hash->put(domain.c_str(), new_entry_A);
-}
+void global_server::set_static_ip(const string& domain, uint32_t ip) {}
 
 void global_server::add_static_ip(const string& domain, uint32_t ip)
 {
@@ -86,12 +81,6 @@ void global_server::add_static_ip(const string& domain, uint32_t ip)
 
 void global_server::init_server()
 {
-    if (hash != nullptr) {
-        delete hash;
-    } else {
-        hash = new hash_table_type(cache_count);
-    }
-
     if (static_address != nullptr) {
         for (auto& sa : *static_address) {
             auto& domain = std::get<0>(sa);
@@ -107,9 +96,6 @@ void global_server::init_server()
 
 global_server::~global_server()
 {
-    if (hash != nullptr) {
-        delete hash;
-    }
     if (uv_main_loop != nullptr) {
         uv_loop_close(uv_main_loop);
         free(uv_main_loop);
@@ -127,7 +113,6 @@ void* work_thread_fn(void*)
     static auto& rqueue     = server.get_queue();
     static auto* queue_lock = server.get_spinlock();
     static auto* queue_sem  = server.get_semaphore();
-    static auto& htable     = server.get_hashtable();
 
     while (true) {
         sem_wait(queue_sem);
@@ -138,10 +123,5 @@ void* work_thread_fn(void*)
         auto name = item->getQuery().getName();
         auto id   = item->getQueryID();
         DEBUG("Input DNS Request:  ID #{0:x} -> {1}", id, name);
-        // hash::hash_entry<const char*>* entry;
-        // bool found = htable.get(name, *entry);
-        // if (found) {
-        //     VLOG(INFO) << name << " found in hashtable " << entry->to_string();
-        // }
     }
 }
