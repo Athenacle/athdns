@@ -1,0 +1,65 @@
+
+#ifndef INC_CONFIG_H
+#define INC_CONFIG_H
+
+#define PROJECT_NAME "@PROJECT_NAME@"
+
+#define PROJECT_VERSION "@PROJECT_VERSION@"
+
+//Build Information
+#define SOURCE_ROOT "@CMAKE_SOURCE_DIR@"
+
+#define BINARY_ROOT "@CMAKE_BINARY_DIR@"
+
+#define COMPILER "@CMAKE_CXX_COMPILER@"
+
+#define COMPILER_OPTION "@CMAKE_CXX_FLAGS@"
+
+#define BUILD_TIME "@WXCC_BUILD_TIME@"
+
+//BUILD SYSTEM
+#cmakedefine WXCC_BUILD_ON_UNIX
+
+#cmakedefine WXCC_BUILD_ON_WINDOWS
+
+//INCULUDE FILE
+
+#cmakedefine UNIX_HAVE_UNISTD
+
+#cmakedefine UNIX_HAVE_SYS_STAT
+
+#cmakedefine UNIX_HAVE_FCNTL
+
+//FUNCTION
+
+#cmakedefine UNIX_HAVE_WRITE
+
+#cmakedefine UNIX_HAVE_READ
+
+#cmakedefine UNIX_HAVE_STAT
+
+#cmakedefine UNIX_HAVE_OPEN
+
+#cmakedefine UNIX_HAVE_GETOPTLONG
+
+#cmakedefine UNIX_HAVE_STRERROR
+
+#cmakedefine HAVE_JEMALLOC
+
+#cmakedefine HAVE_BUILTIN_EXPECT
+
+#ifdef HAVE_JEMALLOC
+#    include <jemalloc/jemalloc.h>
+#endif
+
+#ifdef NDEBUG
+#    ifdef HAVE_BUILTIN_EXPECT
+#        define likely(exp) __builtin_expect((exp), 1)
+#        define unlikely(exp) __builtin_expect((exp), 0)
+#    endif  // HAVE_BUILTIN_EXPECT
+#else
+#    define likely(exp) (exp)
+#    define unlikely(exp) (exp)
+#endif  //NDEBUG
+
+#endif
