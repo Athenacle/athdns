@@ -14,7 +14,7 @@ DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
 
 %{
 #include "config_file.h"
-
+#include "bison_parser.h"
 %}
 
 %option yylineno
@@ -25,7 +25,7 @@ DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
 
 #.*\n                                               {/* comment */ }
 
-{DOMAIN}                                            { return DOMAIN; }
+{DOMAIN}                                            {yylval.text =strdup(yytext); return DOMAIN; }
 
 "nameserver"                                        { return KW_NAMESERVER; }
 "parallel-query"                                    { return KW_PARALLEL_QUERY; }
@@ -41,18 +41,20 @@ DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
 "ERROR"                                             { return KW_LOG_ERROR; }
 "WARNING"                                           { return KW_LOG_WARNING; }
 "INFO"                                              { return KW_LOG_INFO; }
-"ON"                                                { return KW_ON; }
-"OFF"                                               { return KW_OFF; }
+"ON"                                                {yylval.number= VALUE_ON; return KW_ON; }
+"OFF"                                               {yylval.number = VALUE_OFF; return KW_OFF; }
 
-{DIGIT}+                                            { return NUMBER; }
-{IP_ADDRESS}                                        { return IP; }
-{TEXT}                                              { return STRING_TEXT; }
+"report-timeout"                                    { return KW_REPORT_TIMEOUT;}
+
+{DIGIT}+                                            {yylval.number = atoll(yytext); return NUMBER; }
+{IP_ADDRESS}                                        {yylval.text = strdup(yytext);  return IP; }
+{TEXT}                                              {yylval.text = strdup(yytext);  return STRING_TEXT; }
 
 {WS}+                                               { /* whitespace separates tokens */ }
 
 \n                                                  { return NEWLINE; }
 
 .                                                   { /* discard bad characters */ }
-<<eof>>                                             { return FLEX_EOF; }
+<<eof>>                                             { return END; }
 
 %%

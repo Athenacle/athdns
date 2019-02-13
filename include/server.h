@@ -186,6 +186,11 @@ public:
         parallel_query = pq;
     }
 
+    void set_report_timeout(int to)
+    {
+        timer_timeout = to;
+    }
+
     void set_timeout_requery(bool re)
     {
         timeout_requery = re;
