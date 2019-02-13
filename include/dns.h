@@ -3,9 +3,15 @@
 #ifndef DNS_H
 #define DNS_H
 
-#include <cinttypes>
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
+#include "dnsserver.h"
+#include "record.h"
 
 #include <cassert>
+#include <cinttypes>
 
 namespace dns
 {
@@ -29,6 +35,7 @@ namespace dns
         const uint8_t DNS_TYPE_TXT   = 16;  // text strings
 
 
+        //dns reply code
         const uint8_t DNS_RCODE_NOERROR  = 0x0;  //No error; successful update.
         const uint8_t DNS_RCODE_FORMERR  = 0x1;  //Format error
         const uint8_t DNS_RCODE_SERVFAIL = 0x2;  //DNS server encountered an internal error
@@ -46,20 +53,91 @@ namespace dns
         //A name used in the Prerequisite or Update sections is not within the zone specified by the Zone section.
         const uint8_t DNS_RCODE_NOTZONE = 0xa;
 
-
         const uint8_t DNS_OPCODE_STAND_QUERY   = 0;
         const uint8_t DNS_OPCODE_REVERSE       = 1;
         const uint8_t DNS_OPCODE_SERVER_STATUS = 2;
+
+        const uint16_t DNS_CLASS_IN = 0x1;
 
         const char DNS_OPCODE[][25] = {
             "OPCode: Standard Query",  // 0
             "OPCode: Reverse Query",   // 1
             "OPCode: Server Status"    // 2
         };
+
+
+        const int DNS_FLAGS_BIT_QUERY = 0;
+
+        const int DNS_FLAGS_RESP_AA = 5;
+        const int DNS_FLAGS_BIT_TC  = 6;
+        const int DNS_FLAGS_BIT_RD  = 7;
+        const int DNS_FLAGS_RESP_RA = 8;
+
+        const int DNS_FLAGS_RESP_ANSWER_AUTHENTICATED = 10;
+        const int DNS_FLAGS_RESP_NON_AUTHENTICATED    = 11;
+
+
     }  // namespace dns_values
+
+
+    /*
+     * bit_is_set:
+     *    one  byte: 0x 1  1  1  1  1  1  1  1
+     *    position :    0  1  2  3  4  5  6  7
+     */
+
+    inline bool bit_is_set(uint8_t num, int offset)
+    {
+        assert(offset >= 0 && offset < 8);
+        return ((num >> (8 - offset - 1)) & 0x1) == 1;
+    }
+
+    inline void bit_set(uint8_t *num, int count, bool set = true)
+    {
+        assert(count >= 0 && count < 8);
+        uint8_t mask = 0x1 << (8 - count - 1);
+        if (likely(set)) {
+            *num = *num | mask;
+        } else {
+            mask = ~mask;
+            *num = *num & mask;
+        }
+    }
+
+    inline bool flag_is_set(uint8_t *flags, int flag)
+    {
+        assert(flag >= 0 && flag < 16);
+        if (flag >= 8) {
+            return bit_is_set(*(flags + 1), flag % 8);
+        } else {
+            return bit_is_set(*flags, flag);
+        }
+    }
+
+    inline void flag_set(uint8_t *flags, int flag, bool set = true)
+    {
+        assert(flag >= 0 && flag < 16);
+        if (flag >= 8) {
+            bit_set((flags + 1), flag % 8, set);
+        } else {
+            bit_set(flags, flag, set);
+        }
+    }
+
+    namespace dns_utils
+    {
+        const char *query_string_parser(uint8_t *);
+        const uint8_t *query_string_generator(const char *);
+        int query_string_generator(
+            const char *, uint8_t *, size_t, uint8_t = dns_values::DNS_TYPE_A, uint8_t = 1);
+        int query_string_generator(const Query &, uint8_t *, size_t);
+    };  // namespace dns_utils
+
 
     class Query
     {
+        friend int dns_utils::query_string_generator(const Query &, uint8_t *, size_t);
+
         uint16_t _type;
         uint16_t _class;
 
@@ -71,6 +149,7 @@ namespace dns
         static const uint8_t QUERY_CLASS_IN;
 
         explicit Query(uint8_t *);
+
         Query()
         {
             _type = _class = _label_count = 0;
@@ -99,13 +178,16 @@ namespace dns
 
     class DnsPacket
     {
+        friend class dns_package_builder;
+
     private:
         uint8_t *_data;
         uint32_t _size;
 
+        uint8_t *flag_pointer;
+
         uint16_t _id;
         uint16_t _flag;
-
 
         DnsPacket()
         {
@@ -114,19 +196,19 @@ namespace dns
             _data       = nullptr;
         }
 
-        void testFlagSet() const
+        void test_flag() const
         {
-#ifdef DEBUG
             assert(_flag != 0xffff);
-#endif
         }
+
         Query _query;
 
     public:
         ~DnsPacket();
 
-
         static DnsPacket *fromDataBuffer(uint8_t *, uint32_t);
+
+        static DnsPacket *build_response_with_records(DnsPacket *, record_node *);
 
         uint16_t getQueryID() const;
         uint16_t getFlag() const;
@@ -143,6 +225,17 @@ namespace dns
         uint16_t getAuthorityRRCount() const;
         uint16_t getAdditionalRRCount() const;
 
+        uint32_t get_size() const
+        {
+            return _size;
+        }
+
+        uint8_t *get_data() const
+        {
+            return _data;
+        }
+
+
         const Query &getQuery() const
         {
             return _query;
@@ -152,7 +245,59 @@ namespace dns
         bool isTC() const;
         bool isRD() const;
         bool isRA() const;
+        bool isAD() const;
     };
+
+    using reference = dns_package_builder &;
+
+    class dns_package_builder
+    {
+        uint8_t *builder_buffer;
+
+        uint8_t header[12];
+        uint8_t *flag_pointer;
+
+        uint8_t *query_pointer;
+        int query_length;
+
+        uint8_t *answer_pointer;
+        int answer_length;
+
+        uint8_t *authority_pointer;
+        int authority_length;
+
+        uint8_t *additional_pointer;
+        int addition_length;
+
+        static uint8_t *buffer_allocate(size_t);
+        static void buffer_destroy(uint8_t *);
+
+    public:
+        dns_package_builder();
+        ~dns_package_builder();
+
+        reference set_id(uint16_t);
+
+        reference as_query();
+        reference as_response();
+
+        reference set_opcode(uint8_t);
+        reference set_TC();
+        reference set_resp_AA();
+        reference set_RD();
+        reference set_resp_RA();
+        reference set_resp_AnswerAuthenicated();
+        reference set_reply_code(uint8_t);
+
+        reference set_query(const char *);
+        reference set_query(uint8_t *, int);
+        reference set_query(const Query &);
+
+        reference add_record(record_node *);
+
+        DnsPacket *build();
+    };
+
 
 }  // namespace dns
 

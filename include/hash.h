@@ -6,6 +6,7 @@
 #endif
 
 #include "dnsserver.h"
+#include "record.h"
 
 #include <cassert>
 #include <cinttypes>
@@ -20,7 +21,6 @@ namespace hash
         uint32_t hash_2(const char *);
     }  // namespace hash_fn
 
-    using domain_name = const char *;
 
     class hashtable;
 
@@ -61,47 +61,6 @@ namespace hash
         };
     }  // namespace alloc
 
-    class record_node
-    {
-        friend class hashtable;
-
-        domain_name name;
-
-        record_node *lru_next;
-        record_node *lru_prev;
-
-    protected:
-        bool domain_name_equal(domain_name) const;
-
-    public:
-        record_node();
-        record_node(domain_name);
-        virtual ~record_node();
-
-        domain_name get_name() const
-        {
-            return name;
-        }
-
-        bool operator==(const record_node &) const;
-
-        bool operator==(domain_name) const;
-
-        void *operator new(size_t);
-
-        void operator delete(void *);
-    };
-
-    class record_node_A : public record_node
-    {
-        ip_address address;
-
-    public:
-        record_node_A();
-        record_node_A(domain_name, ip_address &);
-        bool operator==(const record_node_A &) const;
-        bool operator==(const ip_address &) const;
-    };
 
     class hashtable
     {
@@ -183,6 +142,8 @@ namespace hash
         bool exists(const string &) const;
 
         size_type get_saved() const;
+
+        pointer get_last() const;
     };
 
 }  // namespace hash

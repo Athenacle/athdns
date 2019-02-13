@@ -1,5 +1,5 @@
 
-CMAKE_MINIMUM_REQUIRED(VERSION 3.1)
+CMAKE_MINIMUM_REQUIRED(VERSION 3.4)
 
 PROJECT(dns)
 
@@ -30,6 +30,7 @@ INCLUDE(CompilerOptionCheck)
 INCLUDE(ConfigCheck)
 INCLUDE(FindLibuv)
 INCLUDE(FindJemalloc)
+INCLUDE(TestBigEndian)
 
 IF(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
   ADD_DEFINITIONS(-fno-exceptions)
@@ -40,6 +41,8 @@ ENDIF()
 ADD_DEFINITIONS(-DHAVE_CONFIG_H)
 ADD_DEFINITIONS(-DDEBUG_THIS)
 ADD_DEFINITIONS(-pthread)
+
+TEST_BIG_ENDIAN(ON_BIG_ENDIAN)
 
 INCLUDE_DIRECTORIES(${WXCC_INCLUDE_ROOT})
 
@@ -93,7 +96,8 @@ IF(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
   ADD_DEFINITIONS(-Wno-global-constructors)
 ENDIF()
 
-ADD_EXECUTABLE(dnstest ${CMAKE_SOURCE_DIR}/tests/test.cpp
+ADD_EXECUTABLE(dnstest
+  ${CMAKE_SOURCE_DIR}/tests/test_dns.cpp
   ${CMAKE_SOURCE_DIR}/tests/utils.cpp
   ${CMAKE_SOURCE_DIR}/tests/test_utils.cpp
   ${CMAKE_SOURCE_DIR}/tests/hash_test.cpp

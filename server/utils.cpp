@@ -62,25 +62,7 @@ namespace utils
         return false;
     }
 
-    // print_able
-
-    print_able::~print_able() {}
-
 }  // namespace utils
-
-void ip_address::to_string(string &buffer) const
-{
-    if (buffer.capacity() < 20) {
-        buffer.reserve(20);
-    }
-    char buf[8];
-    for (int i = 0; i < 4; i++) {
-        uint8_t part = (address_ >> ((3 - i) * 8)) & 0xff;
-        sprintf(buf, "%d.", part);
-        buffer.append(buf);
-    }
-    buffer.erase(buffer.length() - 1);
-}
 
 namespace logging
 {
@@ -110,5 +92,8 @@ namespace logging
         }
         spdlog::set_level(level);
     }
+
+    void init_logging() {}
+
 
 }  // namespace logging

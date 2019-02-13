@@ -37,67 +37,6 @@ namespace hash
         }
     }  // namespace hash_fn
 
-
-    void *record_node::operator new(size_t s)
-    {
-        return ::malloc(s);
-    }
-
-    void record_node::operator delete(void *p)
-    {
-        return ::free(p);
-    }
-
-    record_node::~record_node()
-    {
-        if (name != nullptr)
-            utils::strfree(name);
-    }
-
-    record_node::record_node(domain_name n)
-    {
-        name     = utils::strdup(n);
-        lru_prev = lru_next = nullptr;  //(record_node *)0xdeadbeef;
-    }
-
-    record_node::record_node()
-    {
-        name = nullptr;
-    }
-
-    bool record_node::domain_name_equal(domain_name n) const
-    {
-        return utils::strcmp(n, this->name) == 0;
-    }
-
-
-    bool record_node::operator==(const record_node &) const
-    {
-        return this->operator==(name);
-    }
-
-    bool record_node::operator==(domain_name name) const
-    {
-        return domain_name_equal(name);
-    }
-
-    record_node_A::record_node_A(domain_name name, ip_address &ip) : record_node(name), address(ip)
-    {
-    }
-
-    bool record_node_A::operator==(const ip_address &ip) const
-    {
-        return address == ip;
-    }
-
-    bool record_node_A::operator==(const record_node_A &a) const
-    {
-        return domain_name_equal(a.get_name()) && this->operator==(a.address);
-    }
-
-
-    // class htable
-
     hashtable::hashtable(size_type size)
     {
         total_size = size;
@@ -217,6 +156,11 @@ namespace hash
         auto &entry = get_container(name);
         auto pos    = entry.find(name);
         return pos != entry.end();
+    }
+
+    record_node *hashtable::get_last() const
+    {
+        return lru_head;
     }
 
 
