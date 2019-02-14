@@ -42,9 +42,9 @@ struct delete_item {
 
     ~delete_item()
     {
-        assert(dns_packet != nullptr);
-        assert(buf != nullptr);
-        assert(addr != nullptr);
+        assert(dns_packet == nullptr);
+        assert(buf == nullptr);
+        assert(addr == nullptr);
     }
 
 private:
@@ -238,6 +238,7 @@ public:
     void start_server_loop()
     {
         uv_run(uv_main_loop, UV_RUN_DEFAULT);
+        pthread_join(working_thread, nullptr);
     }
 
     void do_stop();

@@ -1,4 +1,3 @@
-
 #include "server.h"
 #include "dns.h"
 #include "dnsserver.h"
@@ -131,7 +130,6 @@ global_server::~global_server()
 void global_server::do_stop()
 {
     INFO("Stopping server.");
-    uv_udp_recv_stop(&server_socket);
     uv_timer_stop(&timer);
     uv_stop(uv_main_loop);
 }
@@ -144,11 +142,12 @@ void global_server::set_server_log_level(utils::log_level ll)
 void uv_udp_send_handler(uv_udp_send_t* req, int status)
 {
     delete_item* item = reinterpret_cast<delete_item*>(req->data);
+    DEBUG("deleteing send status {0}", status);
     if (unlikely(status < 0)) {
         ERROR("DNS reply send  failed: {0}", uv_strerror(status));
     }
-
     item->do_delete();
+    delete item;
     ::free(req);
 }
 
@@ -174,6 +173,7 @@ void* work_thread_fn(void*)
         auto name = incoming->getQuery().getName();
         if (unlikely(strcmp(name, "stop.dnsserver.ok") == 0)) {
             delete incoming;
+            utils::destroy(std::get<1>(item));
             break;
         }
 
@@ -181,7 +181,9 @@ void* work_thread_fn(void*)
         record_node* found = table.get(name);
         if (found == nullptr) {
             DDEBUG("Input DNS Request:  ID #{0:x} -> {1}. NOT Found", id, name);
-
+            delete incoming;
+            utils::destroy(std::get<1>(item));
+            //TODO implements this.
         } else {
             string text;
             found->to_string(text);
