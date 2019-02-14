@@ -9,33 +9,52 @@ void atexit_handler();
 
 void uv_handler_on_alloc(uv_handle_t*, size_t, uv_buf_t* buf)
 {
-    const size_t suggest = 256;
-    buf->base            = reinterpret_cast<char*>(malloc(suggest * sizeof(char)));
-    buf->len             = suggest;
+    const size_t suggest = 512;
+    buf->base = reinterpret_cast<char*>(malloc(suggest * sizeof(char)));
+    buf->len = suggest;
 }
 
 void uv_handler_on_recv(
     uv_udp_t*, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr, unsigned int)
 {
-    static auto& server     = global_server::get_server();
-    static auto& rqueue     = server.get_queue();
+    static auto& server = global_server::get_server();
+    static auto& rqueue = server.get_queue();
     static auto* queue_lock = server.get_spinlock();
-    static auto* queue_sem  = server.get_semaphore();
+    static auto* queue_sem = server.get_semaphore();
 
     if (addr == nullptr && nread == 0) {
+        free(buf->base);
         return;
     }
 
     auto packet = DnsPacket::fromDataBuffer(reinterpret_cast<uint8_t*>(buf->base),
                                             static_cast<uint32_t>(nread));
+    auto new_addr = utils::make(addr);
     packet->parse();
     free(buf->base);
     pthread_spin_lock(queue_lock);
-    rqueue.emplace(packet);
+    rqueue.emplace(std::make_tuple(packet, new_addr));
     sem_post(queue_sem);
     pthread_spin_unlock(queue_lock);
+    server.increase_request();
+}
 
-    DEBUG("RECV CALLED.");
+void uv_timer_handler(uv_timer_t*)
+{
+    static auto& server = global_server::get_server();
+    static auto total_mem = uv_get_total_memory();
+    int forward = server.get_total_forward_cound();
+    int total = server.get_total_request();
+    auto hit = total - forward;
+    INFO(
+        "Report: Incoming Request {0}, hashtable hit {1}, missing rate {2} forward count {3}, "
+        "hashtable saved {4}, memory usage {5} kB ",
+        total,
+        total - forward,
+        (hit * 1.0) / total,
+        forward,
+        server.get_hashtable_size(),
+        0);
 }
 
 void atexit_handler()
@@ -46,11 +65,13 @@ void atexit_handler()
 
 int main(int argc, CH* const argv[])
 {
+    logging::init_logging();
     utils::config_system(argc, argv);
     auto& server = global_server::get_server();
+    atexit(atexit_handler);
+
     server.init_server();
     server.start_server_loop();
 
-    atexit(atexit_handler);
     return 0;
 }

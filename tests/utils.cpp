@@ -18,7 +18,7 @@ using std::vector;
 TEST(utils, split)
 {
     {
-        string str         = PRE("1.2.3.4.5.6.7.8");
+        string str = PRE("1.2.3.4.5.6.7.8");
         const CH data[][2] = {
             PRE("1"),
             PRE("2"),
@@ -32,22 +32,22 @@ TEST(utils, split)
         ARRAY_SPLIT_TEST(8ul, '.');
     }
     {
-        string str         = PRE("This is an apple.");
+        string str = PRE("This is an apple.");
         const CH data[][7] = {PRE("This"), PRE("is"), PRE("an"), PRE("apple.")};
         ARRAY_SPLIT_TEST(4ul, ' ');
     }
     {
-        string str          = PRE("This is an apple.");
+        string str = PRE("This is an apple.");
         const CH data[][20] = {PRE("This is an apple.")};
         ARRAY_SPLIT_TEST(1ul, '#');
     }
     {
-        string str          = PRE("This is an apple.");
+        string str = PRE("This is an apple.");
         const CH data[][20] = {PRE("This is an apple")};
         ARRAY_SPLIT_TEST(1ul, '.');
     }
     {
-        string str         = PRE("apple");
+        string str = PRE("apple");
         const CH data[][5] = {PRE("a"), PRE(""), PRE("le")};
         ARRAY_SPLIT_TEST(3ul, 'p');
     }

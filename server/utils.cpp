@@ -24,8 +24,8 @@ namespace utils
     void split(vector<string> &vec, const CH *s, const CH c)
     {
         const auto bak = strdup(s);
-        auto begin     = bak;
-        auto ptr       = bak;
+        auto begin = bak;
+        auto ptr = bak;
         do {
             for (; *ptr;) {
                 if (*ptr == c) {
@@ -54,33 +54,15 @@ namespace utils
             auto all_digit = true;
             for (auto &part : ip_part) {
                 const auto ret = check_all_digit(part);
-                all_digit      = all_digit && (ret >= 0 && ret <= 250);
-                address        = (address << 8) | static_cast<uint8_t>(ret);
+                all_digit = all_digit && (ret >= 0 && ret <= 250);
+                address = (address << 8) | static_cast<uint8_t>(ret);
             }
             return all_digit;
         }
         return false;
     }
 
-    // print_able
-
-    print_able::~print_able() {}
-
 }  // namespace utils
-
-void ip_address::to_string(string &buffer) const
-{
-    if (buffer.capacity() < 20) {
-        buffer.reserve(20);
-    }
-    char buf[8];
-    for (int i = 0; i < 4; i++) {
-        uint8_t part = (address_ >> ((3 - i) * 8)) & 0xff;
-        sprintf(buf, "%d.", part);
-        buffer.append(buf);
-    }
-    buffer.erase(buffer.length() - 1);
-}
 
 namespace logging
 {
@@ -110,5 +92,8 @@ namespace logging
         }
         spdlog::set_level(level);
     }
+
+    void init_logging() {}
+
 
 }  // namespace logging

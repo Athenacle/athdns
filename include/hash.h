@@ -6,6 +6,7 @@
 #endif
 
 #include "dnsserver.h"
+#include "record.h"
 
 #include <cassert>
 #include <cinttypes>
@@ -20,7 +21,6 @@ namespace hash
         uint32_t hash_2(const char *);
     }  // namespace hash_fn
 
-    using domain_name = const char *;
 
     class hashtable;
 
@@ -29,8 +29,8 @@ namespace hash
         template <class T>
         struct allocator {
             using value_type = T;
-            using pointer    = value_type *;
-            using size_type  = size_t;
+            using pointer = value_type *;
+            using size_type = size_t;
 
         public:
             static pointer allocate(size_type count)
@@ -61,47 +61,6 @@ namespace hash
         };
     }  // namespace alloc
 
-    class record_node
-    {
-        friend class hashtable;
-
-        domain_name name;
-
-        record_node *lru_next;
-        record_node *lru_prev;
-
-    protected:
-        bool domain_name_equal(domain_name) const;
-
-    public:
-        record_node();
-        record_node(domain_name);
-        virtual ~record_node();
-
-        domain_name get_name() const
-        {
-            return name;
-        }
-
-        bool operator==(const record_node &) const;
-
-        bool operator==(domain_name) const;
-
-        void *operator new(size_t);
-
-        void operator delete(void *);
-    };
-
-    class record_node_A : public record_node
-    {
-        ip_address address;
-
-    public:
-        record_node_A();
-        record_node_A(domain_name, ip_address &);
-        bool operator==(const record_node_A &) const;
-        bool operator==(const ip_address &) const;
-    };
 
     class hashtable
     {
@@ -121,19 +80,19 @@ namespace hash
 
         using domain_name = const char *;
 
-        using record_type     = record_node;
-        using pointer         = record_node *;
-        using reference       = record_type &;
+        using record_type = record_node;
+        using pointer = record_node *;
+        using reference = record_type &;
         using const_reference = const record_type &;
-        using const_pointer   = const record_type *;
+        using const_pointer = const record_type *;
 
         using container_type =
             std::unordered_map<domain_name, record_node *, unordered_map_hash, unordered_map_equal>;
 
-        using lock_type    = pthread_spinlock_t;
+        using lock_type = pthread_spinlock_t;
         using lock_pointer = lock_type *;
 
-        using container_pointer   = container_type *;
+        using container_pointer = container_type *;
         using container_reference = container_type &;
 
         using size_type = size_t;
@@ -154,16 +113,16 @@ namespace hash
     private:
         container_reference get_container(domain_name name) const
         {
-            auto hc_1   = hash::hash_fn::hash_1(name);
+            auto hc_1 = hash::hash_fn::hash_1(name);
             auto offset = hc_1 % hash_size;
             return container[offset];
         }
 
         container_reference get_container(domain_name name, size_type &off) const
         {
-            auto hc_1   = hash::hash_fn::hash_1(name);
+            auto hc_1 = hash::hash_fn::hash_1(name);
             auto offset = hc_1 % hash_size;
-            off         = offset;
+            off = offset;
             return container[offset];
         }
 
@@ -183,6 +142,8 @@ namespace hash
         bool exists(const string &) const;
 
         size_type get_saved() const;
+
+        pointer get_last() const;
     };
 
 }  // namespace hash

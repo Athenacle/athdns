@@ -16,7 +16,7 @@ namespace
     template <class K, class V>
     struct CacheNode_ {
         using this_type = CacheNode_<K, V>;
-        using pointer   = this_type *;
+        using pointer = this_type *;
 
         K key;
         V value;
@@ -33,13 +33,13 @@ namespace
     public:
         LRUCache(int cache_size = 10)
         {
-            cache_size_             = cache_size;
-            cache_real_size_        = 0;
-            p_cache_list_head       = new CacheNode();
-            p_cache_list_near       = new CacheNode();
+            cache_size_ = cache_size;
+            cache_real_size_ = 0;
+            p_cache_list_head = new CacheNode();
+            p_cache_list_near = new CacheNode();
             p_cache_list_head->next = p_cache_list_near;
-            p_cache_list_head->pre  = NULL;
-            p_cache_list_near->pre  = p_cache_list_head;
+            p_cache_list_head->pre = NULL;
+            p_cache_list_near->pre = p_cache_list_head;
             p_cache_list_near->next = NULL;
         }
         ~LRUCache()
@@ -109,7 +109,7 @@ namespace
                 cout << "free" << endl;
                 p = p_cache_list_near->pre->pre;
                 delete p->next;
-                p->next                = p_cache_list_near;
+                p->next = p_cache_list_near;
                 p_cache_list_near->pre = p;
             }
 
@@ -119,7 +119,7 @@ namespace
                 return false;
 
             addToFront(p);
-            p->key   = key;
+            p->key = key;
             p->value = value;
 
             cache_real_size_++;
@@ -140,10 +140,10 @@ namespace
 
         void addToFront(CacheNode *node)
         {
-            node->next                   = p_cache_list_head->next;
+            node->next = p_cache_list_head->next;
             p_cache_list_head->next->pre = node;
-            p_cache_list_head->next      = node;
-            node->pre                    = p_cache_list_head;
+            p_cache_list_head->next = node;
+            node->pre = p_cache_list_head;
         }
     };
 
@@ -172,7 +172,7 @@ TEST(hash_table, lru_test)
     EXPECT_EQ(cache.size(), table.get_saved()) << cache.size();
 
     for (auto &iter : vec) {
-        auto &key                    = std::get<0>(iter);
+        auto &key = std::get<0>(iter);
         const record_node *table_the = table.get(key);
         record_node_A *cache_the;
         EXPECT_TRUE(cache.get(key, cache_the));
@@ -187,8 +187,8 @@ TEST(hash_table, lru_test)
     }
 
     for (size_t i = 0; i < vec.size(); i++) {
-        auto iter         = vec[i];
-        auto &key         = std::get<0>(iter);
+        auto iter = vec[i];
+        auto &key = std::get<0>(iter);
         bool cache_exists = cache.get(key);
         bool table_exists = table.exists(key);
         EXPECT_EQ(cache_exists, table_exists);
@@ -198,12 +198,12 @@ TEST(hash_table, lru_test)
     int cycle_times = random_value() % 10000 + 5000;
 
     for (int i = 0; i < cycle_times; i++) {
-        auto iter   = vec[random_value() % vec.size()];
-        auto &key   = std::get<0>(iter);
+        auto iter = vec[random_value() % vec.size()];
+        auto &key = std::get<0>(iter);
         auto &value = std::get<1>(iter);
         record_node_A *cache_the;
         bool cache_exists = cache.get(key, cache_the);
-        auto table_ptr    = dynamic_cast<record_node_A *>(table.get(key));
+        auto table_ptr = dynamic_cast<record_node_A *>(table.get(key));
         bool table_exists = table_ptr != nullptr;
         EXPECT_EQ(cache_exists, table_exists);
         EXPECT_EQ(cache.size(), table.get_saved());
@@ -240,8 +240,8 @@ TEST(hash_table, hash_test)
     table.get_saved();
 
     for (auto &iter : vec) {
-        auto &key          = std::get<0>(iter);
-        auto &value        = std::get<1>(iter);
+        auto &key = std::get<0>(iter);
+        auto &value = std::get<1>(iter);
         record_node_A *the = dynamic_cast<record_node_A *>(table.get(string(key)));
         EXPECT_TRUE(the != nullptr);
         EXPECT_TRUE(the->operator==(value));
@@ -249,8 +249,8 @@ TEST(hash_table, hash_test)
     }
 
     for (int i = 0; i < 100; i++) {
-        auto p         = random_string(rlen);
-        auto pos       = std::find_if(vec.cbegin(), vec.cend(), [&](auto &ref) {
+        auto p = random_string(rlen);
+        auto pos = std::find_if(vec.cbegin(), vec.cend(), [&](auto &ref) {
             auto &ptr = std::get<0>(ref);
             return utils::strcmp(ptr, p) == 0;
         });
