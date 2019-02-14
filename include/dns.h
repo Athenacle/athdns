@@ -17,31 +17,31 @@ namespace dns
 {
     namespace dns_values
     {
-        const uint8_t DNS_TYPE_A     = 1;   // a host address
-        const uint8_t DNS_TYPE_NS    = 2;   // an authoritative name server
-        const uint8_t DNS_TYPE_MD    = 3;   // a mail destination (Obsolete - use MX)
-        const uint8_t DNS_TYPE_MF    = 4;   // a mail forwarder (Obsolete - use MX)
+        const uint8_t DNS_TYPE_A = 1;       // a host address
+        const uint8_t DNS_TYPE_NS = 2;      // an authoritative name server
+        const uint8_t DNS_TYPE_MD = 3;      // a mail destination (Obsolete - use MX)
+        const uint8_t DNS_TYPE_MF = 4;      // a mail forwarder (Obsolete - use MX)
         const uint8_t DNS_TYPE_CNAME = 5;   // the canonical name for an alias
-        const uint8_t DNS_TYPE_SOA   = 6;   // marks the start of a zone of authority
-        const uint8_t DNS_TYPE_MB    = 7;   // a mailbox domain name (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_MG    = 8;   // a mail group member (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_MR    = 9;   // a mail rename domain name (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_NULL  = 10;  // a null RR (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_WKS   = 11;  // a well known service description
-        const uint8_t DNS_TYPE_PTR   = 12;  // a domain name pointer
+        const uint8_t DNS_TYPE_SOA = 6;     // marks the start of a zone of authority
+        const uint8_t DNS_TYPE_MB = 7;      // a mailbox domain name (EXPERIMENTAL)
+        const uint8_t DNS_TYPE_MG = 8;      // a mail group member (EXPERIMENTAL)
+        const uint8_t DNS_TYPE_MR = 9;      // a mail rename domain name (EXPERIMENTAL)
+        const uint8_t DNS_TYPE_NULL = 10;   // a null RR (EXPERIMENTAL)
+        const uint8_t DNS_TYPE_WKS = 11;    // a well known service description
+        const uint8_t DNS_TYPE_PTR = 12;    // a domain name pointer
         const uint8_t DNS_TYPE_HINFO = 13;  // host information
         const uint8_t DNS_TYPE_MINFO = 14;  // mailbox or mail list information
-        const uint8_t DNS_TYPE_MX    = 15;  // mail exchange
-        const uint8_t DNS_TYPE_TXT   = 16;  // text strings
+        const uint8_t DNS_TYPE_MX = 15;     // mail exchange
+        const uint8_t DNS_TYPE_TXT = 16;    // text strings
 
 
         //dns reply code
-        const uint8_t DNS_RCODE_NOERROR  = 0x0;  //No error; successful update.
-        const uint8_t DNS_RCODE_FORMERR  = 0x1;  //Format error
+        const uint8_t DNS_RCODE_NOERROR = 0x0;   //No error; successful update.
+        const uint8_t DNS_RCODE_FORMERR = 0x1;   //Format error
         const uint8_t DNS_RCODE_SERVFAIL = 0x2;  //DNS server encountered an internal error
         const uint8_t DNS_RCODE_NXDOMAIN = 0x3;  //A name that should exist does not exist.
-        const uint8_t DNS_RCODE_NOTIMP   = 0x4;  //DNS server does not support the specified OpCode.
-        const uint8_t DNS_RCODE_REFUSED  = 0x5;  //DNS server refuses to perform the update.
+        const uint8_t DNS_RCODE_NOTIMP = 0x4;    //DNS server does not support the specified OpCode.
+        const uint8_t DNS_RCODE_REFUSED = 0x5;   //DNS server refuses to perform the update.
         const uint8_t DNS_RCODE_YXDOMAIN = 0x6;  //A name that should not exist does exist.
 
         //A resource record set that should not exist does exist.
@@ -53,8 +53,8 @@ namespace dns
         //A name used in the Prerequisite or Update sections is not within the zone specified by the Zone section.
         const uint8_t DNS_RCODE_NOTZONE = 0xa;
 
-        const uint8_t DNS_OPCODE_STAND_QUERY   = 0;
-        const uint8_t DNS_OPCODE_REVERSE       = 1;
+        const uint8_t DNS_OPCODE_STAND_QUERY = 0;
+        const uint8_t DNS_OPCODE_REVERSE = 1;
         const uint8_t DNS_OPCODE_SERVER_STATUS = 2;
 
         const uint16_t DNS_CLASS_IN = 0x1;
@@ -69,12 +69,12 @@ namespace dns
         const int DNS_FLAGS_BIT_QUERY = 0;
 
         const int DNS_FLAGS_RESP_AA = 5;
-        const int DNS_FLAGS_BIT_TC  = 6;
-        const int DNS_FLAGS_BIT_RD  = 7;
+        const int DNS_FLAGS_BIT_TC = 6;
+        const int DNS_FLAGS_BIT_RD = 7;
         const int DNS_FLAGS_RESP_RA = 8;
 
         const int DNS_FLAGS_RESP_ANSWER_AUTHENTICATED = 10;
-        const int DNS_FLAGS_RESP_NON_AUTHENTICATED    = 11;
+        const int DNS_FLAGS_RESP_NON_AUTHENTICATED = 11;
 
 
     }  // namespace dns_values
@@ -153,7 +153,7 @@ namespace dns
         Query()
         {
             _type = _class = _label_count = 0;
-            _name                         = nullptr;
+            _name = nullptr;
         }
 
         ~Query();
@@ -192,8 +192,8 @@ namespace dns
         DnsPacket()
         {
             _id = _flag = 0xffff;
-            _size       = 0;
-            _data       = nullptr;
+            _size = 0;
+            _data = nullptr;
         }
 
         void test_flag() const

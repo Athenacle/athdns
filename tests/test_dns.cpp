@@ -131,7 +131,7 @@ TEST(DNS_utils, bit_test)
         uint8_t value = 0;
         bitset<8> bs(0);
         for (uint32_t j = 0; j < test::random_value() % 100; j++) {
-            bool set   = test::random_value() % 2 == 0;
+            bool set = test::random_value() % 2 == 0;
             int offset = test::random_value() % 8;
             bs.set(7 - offset, set);
             bit_set(&value, offset, set);
@@ -144,8 +144,8 @@ TEST(DNS_utils, query_string_generator)
 {
     const int buffer_size = 256;
     uint8_t buffer[buffer_size];
-    char eo[]      = "example.com";
-    char weo[]     = "www.example.org";
+    char eo[] = "example.com";
+    char weo[] = "www.example.org";
     uint8_t weob[] = {0x03, 0x77, 0x77, 0x77, 0x07, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c,
                       0x65, 0x03, 0x6f, 0x72, 0x67, 0x00, 0x00, 0x01, 0x00, 0x01};
 

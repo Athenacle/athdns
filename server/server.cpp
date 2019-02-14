@@ -33,7 +33,7 @@ void global_server::add_remote_address(uint32_t ip)
 void global_server::set_log_file(const CH* path)
 {
     log_file = path;
-    int fd   = open(path, O_WRONLY | O_APPEND | O_CREAT);
+    int fd = open(path, O_WRONLY | O_APPEND | O_CREAT);
     if (fd == -1) {
         ERROR("Open log file {0} failed: {1}", path, strerror(errno));
         return;
@@ -68,7 +68,7 @@ void global_server::init_server_loop()
 
     check(status, "uv init");
 
-    const int default_port     = 53535;
+    const int default_port = 53535;
     const auto default_address = "0.0.0.0";
 
     status = uv_ip4_addr(default_address, default_port, &addr);
@@ -109,7 +109,7 @@ void global_server::init_server()
     if (static_address != nullptr) {
         for (auto& sa : *static_address) {
             auto& domain = std::get<0>(sa);
-            auto ip      = std::get<1>(sa);
+            auto ip = std::get<1>(sa);
             set_static_ip(domain, ip);
         }
         delete static_address;
@@ -155,19 +155,19 @@ void uv_udp_send_handler(uv_udp_send_t* req, int status)
 
 void* work_thread_fn(void*)
 {
-    static auto& server    = global_server::get_server();
-    static auto& rqueue    = server.get_queue();
+    static auto& server = global_server::get_server();
+    static auto& rqueue = server.get_queue();
     static auto queue_lock = server.get_spinlock();
-    static auto queue_sem  = server.get_semaphore();
-    static auto& table     = server.get_hashtable();
-    static auto handle     = server.get_server_socket();
+    static auto queue_sem = server.get_semaphore();
+    static auto& table = server.get_hashtable();
+    static auto handle = server.get_server_socket();
 
     prctl(PR_SET_NAME, "working");
 
     while (true) {
         sem_wait(queue_sem);
         pthread_spin_lock(queue_lock);
-        auto item     = rqueue.front();
+        auto item = rqueue.front();
         auto incoming = std::get<0>(item);
         rqueue.pop();
         pthread_spin_unlock(queue_lock);
@@ -177,7 +177,7 @@ void* work_thread_fn(void*)
             break;
         }
 
-        auto id            = incoming->getQueryID();
+        auto id = incoming->getQueryID();
         record_node* found = table.get(name);
         if (found == nullptr) {
             DDEBUG("Input DNS Request:  ID #{0:x} -> {1}. NOT Found", id, name);
@@ -186,19 +186,19 @@ void* work_thread_fn(void*)
             string text;
             found->to_string(text);
             DEBUG("Input DNS Request:  ID #{0:x} -> {1} : {2}", id, name, text);
-            DnsPacket* ret      = DnsPacket::build_response_with_records(incoming, found);
+            DnsPacket* ret = DnsPacket::build_response_with_records(incoming, found);
             uv_udp_send_t* send = reinterpret_cast<uv_udp_send_t*>(malloc(sizeof(uv_udp_send_t)));
 
-            uv_buf_t* buf        = reinterpret_cast<uv_buf_t*>(malloc(sizeof(uv_buf_t)));
+            uv_buf_t* buf = reinterpret_cast<uv_buf_t*>(malloc(sizeof(uv_buf_t)));
             const sockaddr* sock = std::get<1>(item);
 
             buf->base = reinterpret_cast<char*>(ret->get_data());
-            buf->len  = ret->get_size();
+            buf->len = ret->get_size();
             delete incoming;
 
             delete_item* ditem = new delete_item(std::time(nullptr), ret, buf, sock);
-            send->data         = ditem;
-            auto send_status   = uv_udp_send(send, handle, buf, 1, sock, uv_udp_send_handler);
+            send->data = ditem;
+            auto send_status = uv_udp_send(send, handle, buf, 1, sock, uv_udp_send_handler);
 
             if (send_status < 0)
                 DEBUG("send error: {0}", uv_strerror(send_status));

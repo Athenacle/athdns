@@ -12,10 +12,10 @@ namespace hash
         uint32_t hash_1(const CH *str)
         {
             const unsigned int seed = 131;
-            unsigned int hash       = 0;
+            unsigned int hash = 0;
             while (*str) {
                 const uint32_t c = static_cast<uint32_t>(*str++);
-                hash             = hash * seed + c;
+                hash = hash * seed + c;
             }
             return (hash & 0x7FFFFFFF);
         }
@@ -40,11 +40,11 @@ namespace hash
     hashtable::hashtable(size_type size)
     {
         total_size = size;
-        saved      = 0;
+        saved = 0;
         lru_head = lru_end = nullptr;
-        hash_size          = size >> 1;
-        container          = alloc.allocate(hash_size);
-        locks              = lock_alloc.allocate(hash_size);
+        hash_size = size >> 1;
+        container = alloc.allocate(hash_size);
+        locks = lock_alloc.allocate(hash_size);
         for (size_type i = 0; i < hash_size; i++) {
             alloc.construct(container + i);
             pthread_spin_init(locks + i, PTHREAD_PROCESS_PRIVATE);
@@ -84,18 +84,18 @@ namespace hash
             lru_head = lru_end = new_pointer;
         } else {
             new_pointer->lru_next = lru_head;
-            lru_head->lru_prev    = new_pointer;
-            lru_head              = new_pointer;
+            lru_head->lru_prev = new_pointer;
+            lru_head = new_pointer;
         }
         pthread_spin_unlock(lru_lock);
         saved++;
         if (saved >= total_size) {
             pthread_spin_lock(lru_lock);
             assert(lru_end != nullptr);
-            auto new_end      = lru_end->lru_prev;
-            auto old_end      = lru_end;
+            auto new_end = lru_end->lru_prev;
+            auto old_end = lru_end;
             new_end->lru_next = nullptr;
-            lru_end           = new_pointer;
+            lru_end = new_pointer;
             lru_end->lru_next = nullptr;
             saved--;
             pthread_spin_unlock(lru_lock);
@@ -123,10 +123,10 @@ namespace hash
             assert(lru_head != nullptr);
             pthread_spin_lock(lru_lock);
             lru_head->lru_prev = ret;
-            ret->lru_prev      = nullptr;
-            ret->lru_next      = lru_head;
-            lru_head           = ret;
-            lru_end->lru_next  = nullptr;
+            ret->lru_prev = nullptr;
+            ret->lru_next = lru_head;
+            lru_head = ret;
+            lru_end->lru_next = nullptr;
             pthread_spin_unlock(lru_lock);
             return ret;
         } else {
@@ -154,7 +154,7 @@ namespace hash
     bool hashtable::exists(domain_name name) const
     {
         auto &entry = get_container(name);
-        auto pos    = entry.find(name);
+        auto pos = entry.find(name);
         return pos != entry.end();
     }
 

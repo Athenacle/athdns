@@ -35,8 +35,8 @@ struct delete_item {
         utils::destroy(addr);
 #ifndef NDEBUG
         dns_packet = nullptr;
-        buf        = nullptr;
-        addr       = nullptr;
+        buf = nullptr;
+        addr = nullptr;
 #endif
     }
 
@@ -48,7 +48,7 @@ struct delete_item {
     }
 
 private:
-    delete_item()                    = delete;
+    delete_item() = delete;
     delete_item(const delete_item &) = delete;
 };
 
@@ -57,7 +57,7 @@ class global_server
     friend void delete_timer_worker(uv_timer_t *);
 
     using static_address_type = std::tuple<string, uint32_t>;
-    using queue_item          = std::tuple<dns::DnsPacket *, const sockaddr *>;
+    using queue_item = std::tuple<dns::DnsPacket *, const sockaddr *>;
 
     std::vector<ip_address> remote_address;
     std::vector<static_address_type> *static_address;
@@ -93,16 +93,16 @@ class global_server
 
     global_server() : server_socket(), working_thread(), queue_lock(), queue_sem()
     {
-        total_request_count         = 0;
+        total_request_count = 0;
         total_request_forward_count = 0;
-        timeout_requery             = false;
-        parallel_query              = false;
-        default_ttl                 = 256;
-        cache_count                 = 3000;
-        log_file                    = "";
-        uv_main_loop                = nullptr;
-        static_address              = nullptr;
-        timer_timeout               = 5;
+        timeout_requery = false;
+        parallel_query = false;
+        default_ttl = 256;
+        cache_count = 3000;
+        log_file = "";
+        uv_main_loop = nullptr;
+        static_address = nullptr;
+        timer_timeout = 5;
 
         pthread_spin_init(&queue_lock, PTHREAD_PROCESS_PRIVATE);
         sem_init(&queue_sem, 0, 0);

@@ -66,9 +66,9 @@ void record_node::get_value(uint32_t &rttl,
                             uint16_t &rclass,
                             uint16_t &rdata_len) const
 {
-    rttl      = record_ttl;
-    rtype     = record_type;
-    rclass    = record_class;
+    rttl = record_ttl;
+    rtype = record_type;
+    rclass = record_class;
     rdata_len = record_data_length;
 }
 
@@ -136,9 +136,9 @@ int record_node_A::to_data(uint8_t *buffer,
     get_value(ttl, rtype, rclass, rdata_length);
     assert(offset < 0x3fff);
 
-    uint16_t *p     = reinterpret_cast<uint16_t *>(buffer);
+    uint16_t *p = reinterpret_cast<uint16_t *>(buffer);
     uint32_t *ttl_p = reinterpret_cast<uint32_t *>(buffer + 6);
-    uint32_t *ip_p  = reinterpret_cast<uint32_t *>(buffer + 12);
+    uint32_t *ip_p = reinterpret_cast<uint32_t *>(buffer + 12);
 
     if (offset <= 255) {
         buffer[0] = 0xc0;
@@ -148,12 +148,12 @@ int record_node_A::to_data(uint8_t *buffer,
         buffer[1] = offset & 0xff;
     }
 
-    p[1]      = htons(rtype);
-    p[2]      = htons(rclass);
-    p[5]      = htons(rdata_length);
+    p[1] = htons(rtype);
+    p[2] = htons(rclass);
+    p[5] = htons(rdata_length);
     auto tttl = htonl(ttl);
-    *ttl_p    = tttl;
-    *ip_p     = address.get_address();
+    *ttl_p = tttl;
+    *ip_p = address.get_address();
     record_count++;
 
     if (unlikely(node_next != nullptr)) {

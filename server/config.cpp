@@ -69,7 +69,7 @@ void utils::config_system(int argc, CH* const argv[])
         usage();
     }
 
-    auto cf     = argv[1];
+    auto cf = argv[1];
     auto status = access(cf, R_OK);
     if (status != 0) {
         ERROR("Open configuration file {0} failed: {1}", cf, strerror(errno));

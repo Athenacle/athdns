@@ -23,7 +23,7 @@ using CH = char;
 #define PRE(l) l
 #endif
 
-using string        = std::basic_string<CH>;
+using string = std::basic_string<CH>;
 using istringstream = std::basic_istringstream<CH>;
 
 // record.h
@@ -88,7 +88,7 @@ namespace utils
     C *strdup(const C *const str)
     {
         const auto len = strlen(str);
-        auto ret       = str_allocate<C>(len + 1);
+        auto ret = str_allocate<C>(len + 1);
         strcpy(ret, str);
         std::char_traits<C>::assign(ret[len], 0);
         return ret;
@@ -127,12 +127,12 @@ namespace utils
 
 
     enum log_level {
-        LL_OTHERS  = 0,
-        LL_ERROR   = 1,
+        LL_OTHERS = 0,
+        LL_ERROR = 1,
         LL_WARNING = 2,
-        LL_INFO    = 3,
-        LL_TRACE   = 4,
-        LL_OFF     = 5
+        LL_INFO = 3,
+        LL_TRACE = 4,
+        LL_OFF = 5
     };
 
     const CH log_level_prefix[][8] = {"", "ERROR", "WARNING", "INFO", "TRACE"};
