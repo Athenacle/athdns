@@ -1,0 +1,25 @@
+dist: xenial
+sudo: required
+language: cpp
+compiler:
+  - gcc
+before_install:
+  - sudo apt update
+  - sudo apt install -y libuv1-dev bison flex 
+script: 
+  - mkdir build
+  - cd build
+  - cmake ..
+  - make spdlog
+  - make gtest
+  - make
+after_success:
+  - ./dnstest
+branches:
+  only:
+    - master
+notifications:
+  email: false
+addons:
+  apt:
+    update: true
