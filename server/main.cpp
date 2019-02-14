@@ -7,14 +7,14 @@ using namespace dns;
 
 void atexit_handler();
 
-void uv_handler_on_alloc(uv_handle_t*, size_t, uv_buf_t* buf)
+void uvcb_server_incoming_alloc(uv_handle_t*, size_t, uv_buf_t* buf)
 {
     const size_t suggest = 512;
     buf->base = reinterpret_cast<char*>(malloc(suggest * sizeof(char)));
     buf->len = suggest;
 }
 
-void uv_handler_on_recv(
+void uvcb_server_incoming_recv(
     uv_udp_t*, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr, unsigned int)
 {
     static auto& server = global_server::get_server();
@@ -27,19 +27,17 @@ void uv_handler_on_recv(
         return;
     }
 
-    auto packet = DnsPacket::fromDataBuffer(reinterpret_cast<uint8_t*>(buf->base),
-                                            static_cast<uint32_t>(nread));
     auto new_addr = utils::make(addr);
-    packet->parse();
-    free(buf->base);
+    auto new_buf = utils::make(buf);
+
     pthread_spin_lock(queue_lock);
-    rqueue.emplace(std::make_tuple(packet, new_addr));
-    sem_post(queue_sem);
+    rqueue.emplace(std::make_tuple(new_buf, new_addr));
     pthread_spin_unlock(queue_lock);
+    sem_post(queue_sem);
     server.increase_request();
 }
 
-void uv_timer_handler(uv_timer_t*)
+void uvcb_timer_reporter(uv_timer_t*)
 {
     static auto& server = global_server::get_server();
     static auto total_mem = uv_get_total_memory();

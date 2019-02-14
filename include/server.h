@@ -57,7 +57,7 @@ class global_server
     friend void delete_timer_worker(uv_timer_t *);
 
     using static_address_type = std::tuple<string, uint32_t>;
-    using queue_item = std::tuple<dns::DnsPacket *, const sockaddr *>;
+    using queue_item = std::tuple<uv_buf_t *, const sockaddr *>;
 
     std::vector<ip_address> remote_address;
     std::vector<static_address_type> *static_address;

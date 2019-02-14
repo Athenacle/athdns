@@ -46,11 +46,11 @@ namespace dns
 // global functions
 const int default_dns_port = 53;
 
-void uv_timer_handler(uv_timer_t *);
+void uvcb_timer_reporter(uv_timer_t *);
 
-void uv_handler_on_alloc(uv_handle_t *, size_t, uv_buf_t *);
+void uvcb_server_incoming_alloc(uv_handle_t *, size_t, uv_buf_t *);
 
-void uv_handler_on_recv(
+void uvcb_server_incoming_recv(
     uv_udp_t *, ssize_t, const uv_buf_t *, const struct sockaddr *, unsigned int);
 
 //utils

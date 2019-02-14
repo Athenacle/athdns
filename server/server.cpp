@@ -58,10 +58,9 @@ void global_server::init_server_loop()
     auto status = uv_timer_init(uv_main_loop, &timer);
     check(status, "timer report init");
 
-    status = uv_timer_start(&timer, uv_timer_handler, reportt, reportt);
+    status = uv_timer_start(&timer, uvcb_timer_reporter, reportt, reportt);
 
     check(status, "report timer start");
-
 
     status = uv_udp_init(uv_main_loop, &server_socket);
 
@@ -79,7 +78,9 @@ void global_server::init_server_loop()
     if (status == 0) {
         INFO("bind success on {0}:{1}", default_address, default_port);
     }
-    status = uv_udp_recv_start(&server_socket, uv_handler_on_alloc, uv_handler_on_recv);
+    status =
+        uv_udp_recv_start(&server_socket, uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
+
     check(status, "recv start");
 
     pthread_create(&this->working_thread, nullptr, ::work_thread_fn, nullptr);
@@ -167,43 +168,53 @@ void* work_thread_fn(void*)
         sem_wait(queue_sem);
         pthread_spin_lock(queue_lock);
         auto item = rqueue.front();
-        auto incoming = std::get<0>(item);
         rqueue.pop();
         pthread_spin_unlock(queue_lock);
-        auto name = incoming->getQuery().getName();
+        uv_buf_t* incoming_buf = std::get<0>(item);
+        DnsPacket* pack = DnsPacket::fromDataBuffer(reinterpret_cast<uint8_t*>(incoming_buf->base),
+                                                    incoming_buf->len);
+        const sockaddr* incoming_sock = std::get<1>(item);
+        pack->parse();
+        auto name = pack->getQuery().getName();
         if (unlikely(strcmp(name, "stop.dnsserver.ok") == 0)) {
-            delete incoming;
-            utils::destroy(std::get<1>(item));
+            // stop server
+            utils::destroy(incoming_buf->base);
+            utils::destroy(incoming_buf);
+            utils::destroy(incoming_sock);
+            delete pack;
             break;
         }
-
-        auto id = incoming->getQueryID();
+        auto id = pack->getQueryID();
         record_node* found = table.get(name);
         if (found == nullptr) {
             DDEBUG("Input DNS Request:  ID #{0:x} -> {1}. NOT Found", id, name);
-            delete incoming;
-            utils::destroy(std::get<1>(item));
+            utils::destroy(incoming_buf->base);
+            utils::destroy(incoming_buf);
+            utils::destroy(incoming_sock);
+            delete pack;
             //TODO implements this.
         } else {
             string text;
             found->to_string(text);
             DEBUG("Input DNS Request:  ID #{0:x} -> {1} : {2}", id, name, text);
-            DnsPacket* ret = DnsPacket::build_response_with_records(incoming, found);
+            DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
             uv_udp_send_t* send = reinterpret_cast<uv_udp_send_t*>(malloc(sizeof(uv_udp_send_t)));
 
             uv_buf_t* buf = reinterpret_cast<uv_buf_t*>(malloc(sizeof(uv_buf_t)));
-            const sockaddr* sock = std::get<1>(item);
 
             buf->base = reinterpret_cast<char*>(ret->get_data());
             buf->len = ret->get_size();
-            delete incoming;
+            utils::destroy(incoming_buf->base);
+            utils::destroy(incoming_buf);
 
-            delete_item* ditem = new delete_item(std::time(nullptr), ret, buf, sock);
+            delete_item* ditem = new delete_item(std::time(nullptr), ret, buf, incoming_sock);
             send->data = ditem;
-            auto send_status = uv_udp_send(send, handle, buf, 1, sock, uv_udp_send_handler);
+            auto send_status =
+                uv_udp_send(send, handle, buf, 1, incoming_sock, uv_udp_send_handler);
 
             if (send_status < 0)
                 DEBUG("send error: {0}", uv_strerror(send_status));
+            delete pack;
         }
     }
     server.do_stop();
