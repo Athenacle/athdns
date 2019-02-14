@@ -56,6 +56,7 @@ namespace
     {
         yyin = fp;
         yyparse();
+        yylex_destroy();
     }
 
 

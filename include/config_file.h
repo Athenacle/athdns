@@ -16,7 +16,7 @@ extern int yylineno;
 extern int yylex(void);
 extern int yyerror(const char*);
 extern int yyparse(void);
-//extern int yydestroy();
+extern int yylex_destroy(void);
 
 //implements in utils.cpp
 void config_add_static_ip(const char*, const char*);
