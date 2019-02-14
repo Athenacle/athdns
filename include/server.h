@@ -17,24 +17,51 @@
 
 void *work_thread_fn(void *);
 
-void delete_timer_worker(uv_timer_t *);
+struct delete_item {
+    time_t t;
+    dns::DnsPacket *dns_packet;
+    uv_buf_t *buf;
+    const sockaddr *addr;
 
+    delete_item(time_t tt, dns::DnsPacket *p, uv_buf_t *b, const sockaddr *a)
+        : t(tt), dns_packet(p), buf(b), addr(a)
+    {
+    }
+
+    void do_delete()
+    {
+        delete dns_packet;
+        utils::destroy(buf);
+        utils::destroy(addr);
+#ifndef NDEBUG
+        dns_packet = nullptr;
+        buf        = nullptr;
+        addr       = nullptr;
+#endif
+    }
+
+    ~delete_item()
+    {
+        assert(dns_packet != nullptr);
+        assert(buf != nullptr);
+        assert(addr != nullptr);
+    }
+
+private:
+    delete_item()                    = delete;
+    delete_item(const delete_item &) = delete;
+};
 
 class global_server
 {
     friend void delete_timer_worker(uv_timer_t *);
 
-    const int cleanup_timer_timeout = 10;
-
     using static_address_type = std::tuple<string, uint32_t>;
     using queue_item          = std::tuple<dns::DnsPacket *, const sockaddr *>;
-
-    using delete_item = std::tuple<time_t, dns::DnsPacket *, uv_buf_t *, const sockaddr *>;
 
     std::vector<ip_address> remote_address;
     std::vector<static_address_type> *static_address;
     std::queue<queue_item> requests;
-    std::queue<delete_item> delete_queue;
 
     hash::hashtable *table;
 
@@ -54,20 +81,17 @@ class global_server
     uv_udp_t server_socket;
 
     uv_timer_t timer;
-    uv_timer_t delete_timer;
 
     pthread_t working_thread;
 
     pthread_spinlock_t queue_lock;
-    pthread_spinlock_t delete_queue_lock;
 
     sem_t queue_sem;
 
     global_server(const global_server &) = delete;
     void operator=(const global_server &) = delete;
 
-    global_server()
-        : server_socket(), working_thread(), queue_lock(), delete_queue_lock(), queue_sem()
+    global_server() : server_socket(), working_thread(), queue_lock(), queue_sem()
     {
         total_request_count         = 0;
         total_request_forward_count = 0;
@@ -81,7 +105,6 @@ class global_server
         timer_timeout               = 5;
 
         pthread_spin_init(&queue_lock, PTHREAD_PROCESS_PRIVATE);
-        pthread_spin_init(&delete_queue_lock, PTHREAD_PROCESS_PRIVATE);
         sem_init(&queue_sem, 0, 0);
         table = nullptr;
     }
@@ -90,21 +113,7 @@ class global_server
 
     static global_server *server_instance;
 
-    static void free_delete_item(delete_item &);
-
-
 public:
-    pthread_spinlock_t *get_delete_lock()
-    {
-        return &delete_queue_lock;
-    }
-
-    std::queue<delete_item> &get_delete_queue()
-    {
-        return delete_queue;
-    }
-
-
     uv_udp_t *get_server_socket()
     {
         return &server_socket;

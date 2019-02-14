@@ -30,18 +30,6 @@ void global_server::add_remote_address(uint32_t ip)
     remote_address.emplace_back(ip);
 }
 
-void global_server::free_delete_item(delete_item& i)
-{
-    DnsPacket* dp        = std::get<1>(i);
-    uv_buf_t* buf        = std::get<2>(i);
-    const sockaddr* sock = std::get<3>(i);
-
-    delete dp;
-    utils::destroy(buf);
-    utils::destroy(sock);
-}
-
-
 void global_server::set_log_file(const CH* path)
 {
     log_file = path;
@@ -64,7 +52,6 @@ void global_server::init_server_loop()
     };
 
     int reportt = timer_timeout * 1000;
-    int cleant  = cleanup_timer_timeout * 1000;
 
     struct sockaddr_in addr;
     uv_main_loop = uv_default_loop();
@@ -72,16 +59,10 @@ void global_server::init_server_loop()
     auto status = uv_timer_init(uv_main_loop, &timer);
     check(status, "timer report init");
 
-    status = uv_timer_init(uv_main_loop, &delete_timer);
-    check(status, "timer delete init");
-
     status = uv_timer_start(&timer, uv_timer_handler, reportt, reportt);
 
     check(status, "report timer start");
 
-    status = uv_timer_start(&delete_timer, delete_timer_worker, cleant, cleant);
-
-    check(status, "delete timer start");
 
     status = uv_udp_init(uv_main_loop, &server_socket);
 
@@ -145,11 +126,6 @@ global_server::~global_server()
     if (table != nullptr) {
         delete table;
     }
-    while (delete_queue.size() > 0) {
-        auto item = delete_queue.front();
-        delete_queue.pop();
-        global_server::free_delete_item(item);
-    }
 }
 
 void global_server::do_stop()
@@ -157,7 +133,6 @@ void global_server::do_stop()
     INFO("Stopping server.");
     uv_udp_recv_stop(&server_socket);
     uv_timer_stop(&timer);
-    uv_timer_stop(&delete_timer);
     uv_stop(uv_main_loop);
 }
 
@@ -168,20 +143,24 @@ void global_server::set_server_log_level(utils::log_level ll)
 
 void uv_udp_send_handler(uv_udp_send_t* req, int status)
 {
+    delete_item* item = reinterpret_cast<delete_item*>(req->data);
+    if (unlikely(status < 0)) {
+        ERROR("DNS reply send  failed: {0}", uv_strerror(status));
+    }
+
+    item->do_delete();
     ::free(req);
 }
 
 
 void* work_thread_fn(void*)
 {
-    static auto& server       = global_server::get_server();
-    static auto& rqueue       = server.get_queue();
-    static auto queue_lock    = server.get_spinlock();
-    static auto queue_sem     = server.get_semaphore();
-    static auto& table        = server.get_hashtable();
-    static auto handle        = server.get_server_socket();
-    static auto& delete_queue = server.get_delete_queue();
-    static auto delete_lock   = server.get_delete_lock();
+    static auto& server    = global_server::get_server();
+    static auto& rqueue    = server.get_queue();
+    static auto queue_lock = server.get_spinlock();
+    static auto queue_sem  = server.get_semaphore();
+    static auto& table     = server.get_hashtable();
+    static auto handle     = server.get_server_socket();
 
     prctl(PR_SET_NAME, "working");
 
@@ -217,14 +196,12 @@ void* work_thread_fn(void*)
             buf->len  = ret->get_size();
             delete incoming;
 
-            auto send_status = uv_udp_send(send, handle, buf, 1, sock, uv_udp_send_handler);
+            delete_item* ditem = new delete_item(std::time(nullptr), ret, buf, sock);
+            send->data         = ditem;
+            auto send_status   = uv_udp_send(send, handle, buf, 1, sock, uv_udp_send_handler);
 
             if (send_status < 0)
                 DEBUG("send error: {0}", uv_strerror(send_status));
-
-            pthread_spin_lock(delete_lock);
-            delete_queue.emplace(std::make_tuple(std::time(nullptr), ret, buf, sock));
-            pthread_spin_unlock(delete_lock);
         }
     }
     server.do_stop();

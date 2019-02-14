@@ -39,28 +39,6 @@ void uv_handler_on_recv(
     server.increase_request();
 }
 
-void delete_timer_worker(uv_timer_t*)
-{
-    static auto& server = global_server::get_server();
-    static int timeout  = server.cleanup_timer_timeout;
-    auto& dqueue        = server.delete_queue;
-    auto dl             = &server.delete_queue_lock;
-    auto timestamp      = time(nullptr) + timeout;
-
-    pthread_spin_lock(dl);
-    while (true && dqueue.size() > 0) {
-        auto& front = dqueue.front();
-        auto& t     = std::get<0>(front);
-        if (t > timestamp) {
-            dqueue.pop();
-            global_server::free_delete_item(front);
-        } else {
-            break;
-        }
-    }
-    pthread_spin_unlock(dl);
-}
-
 void uv_timer_handler(uv_timer_t*)
 {
     static auto& server   = global_server::get_server();
