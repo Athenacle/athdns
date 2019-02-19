@@ -4,6 +4,16 @@
 #ifndef LOGGING_H
 #define LOGGING_H
 
+#if defined __clang__
+#pragma clang diagnostic ignored "-Wextra-semi"
+#pragma clang diagnostic ignored "-Wunused-member-function"
+#pragma clang diagnostic ignored "-Wswitch-enum"
+#pragma clang diagnostic ignored "-Wnewline-eof"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#pragma clang diagnostic ignored "-Wdocumentation-unknown-command"
+#pragma clang diagnostic ignored "-Weverything"
+#endif
+
 #include "dnsserver.h"
 #include "spdlog/spdlog.h"
 
@@ -29,4 +39,7 @@ namespace logging
 
 }  // namespace logging
 
+#if defined __clang__
+#pragma clang diagnostic enable "-Weverything"
+#endif
 #endif

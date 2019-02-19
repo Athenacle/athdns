@@ -33,7 +33,6 @@ INCLUDE(FindJemalloc)
 INCLUDE(TestBigEndian)
 
 IF(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
-  ADD_DEFINITIONS(-fno-exceptions)
   ADD_DEFINITIONS(-Wno-undef)
   ADD_DEFINITIONS(-Wno-unused-macros)
 ENDIF()
@@ -95,7 +94,6 @@ CONFIGURE_FILE(${WXCC_INCLUDE_ROOT}/config.h.in
 TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${WXCC_LIBS} pthread)
 #test below
 
-
 INCLUDE(Gtest)
 
 IF(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
@@ -112,6 +110,7 @@ ADD_EXECUTABLE(dnstest
   ${CMAKE_SOURCE_DIR}/tests/utils.cpp
   ${CMAKE_SOURCE_DIR}/tests/test_utils.cpp
   ${CMAKE_SOURCE_DIR}/tests/hash_test.cpp
+  ${CMAKE_SOURCE_DIR}/tests/dns_record.cpp
   ${CMAKE_SOURCE_DIR}/tests/main.cpp)
 
-TARGET_LINK_LIBRARIES(dnstest libgtest ${WXCC_LIBS})
+TARGET_LINK_LIBRARIES(dnstest libgtest ${WXCC_LIBS} )

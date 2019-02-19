@@ -50,6 +50,11 @@
 
 #ifdef HAVE_JEMALLOC
 #include <jemalloc/jemalloc.h>
+
+#if defined JEMALLOC_VERSION_MAJOR && JEMALLOC_VERSION_MAJOR < 4
+#error mininal jemalloc version required is 4
+#endif
+
 #endif
 
 #ifdef NDEBUG

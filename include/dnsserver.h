@@ -7,12 +7,14 @@
 #include "config.h"
 #endif
 
+#include <pthread.h>
 #include <unistd.h>
 
 #include <uv.h>
 
 #include <cinttypes>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #ifdef _WIN32
@@ -21,6 +23,11 @@ using CH = wchar_t;
 #else
 using CH = char;
 #define PRE(l) l
+#endif
+
+#if !defined likely || !defined unlikely
+#define likely(expression) (expression)
+#define unlikely(expression) (expression)
 #endif
 
 using string = std::basic_string<CH>;
@@ -137,6 +144,64 @@ namespace utils
 
     const CH log_level_prefix[][8] = {"", "ERROR", "WARNING", "INFO", "TRACE"};
 
+    template <class T, class _ = std::enable_if_t<std::is_integral<T>::value, int>>
+    class atomic_number
+    {
+    private:
+        T value;
+        pthread_spinlock_t lock;
+
+    public:
+        atomic_number(T v = 0) : lock()
+        {
+            pthread_spin_init(&lock, PTHREAD_PROCESS_PRIVATE);
+            value = v;
+        }
+
+        T get()
+        {
+            pthread_spin_lock(&lock);
+            auto ret = value;
+            pthread_spin_unlock(&lock);
+            return ret;
+        }
+
+        void reset(T v)
+        {
+            pthread_spin_lock(&lock);
+            value = v;
+            pthread_spin_unlock(&lock);
+        }
+
+        operator T()
+        {
+            return get();
+        }
+
+        T operator++()
+        {
+            pthread_spin_lock(&lock);
+            value += 1;
+            auto ret = value;
+            pthread_spin_unlock(&lock);
+            return ret;
+        }
+
+        T operator++(int)
+        {
+            pthread_spin_lock(&lock);
+            auto ret = value;
+            value += 1;
+            pthread_spin_unlock(&lock);
+            return ret;
+        }
+    };
+
+    using atomic_int = atomic_number<int>;
+    using atomic_uint16 = atomic_number<uint16_t>;
+
+    uint32_t rand_value();
+
 }  // namespace utils
 
 namespace hash
@@ -144,5 +209,6 @@ namespace hash
     class hashtable;
 }
 
+enum forward_type { FT_ALL = 0, FT_RANDOM = 1, FT_SEQUENSE = 2 };
 
 #endif

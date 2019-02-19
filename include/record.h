@@ -4,41 +4,56 @@
 #ifndef RECORD_H
 #define RECORD_H
 
+#include <arpa/inet.h>
 #include "dnsserver.h"
 
 using domain_name = const char *;
+
+enum class reply_type { NONE, ANSWER, AUTHORITY, ADDITION };
 
 class ip_address
 {
     uint32_t address_;
 
 public:
-    ip_address(const ip_address &ip) : address_(ip.get_address()) {}
+    void reset(uint32_t ip)
+    {
+        address_ = htonl(ip);
+    }
 
-    explicit ip_address(uint32_t ip) : address_(ip) {}
+    ip_address(const ip_address &ip) : address_(ip.address_) {}
+
+    explicit ip_address(uint32_t ip) : address_(htonl(ip)) {}
 
     void to_string(string &) const;
 
-    ip_address();
+    ip_address() : ip_address(0) {}
+
 
     bool operator==(uint32_t cmp) const
     {
-        return address_ == cmp;
+        return address_ == htonl(cmp);
     }
 
     bool operator==(const ip_address &cmp) const
     {
-        return address_ == cmp.get_address();
+        return address_ == cmp.address_;
     }
 
     uint32_t get_address() const
     {
-        return address_;
+        return ntohl(address_);
+    }
+
+    const uint8_t *get_value_address() const
+    {
+        return reinterpret_cast<const uint8_t *>(&address_);
     }
 };
 
 class record_node
 {
+    friend class dns_package_builder;
     friend class hash::hashtable;
 
     domain_name name;
@@ -47,6 +62,12 @@ class record_node
     record_node *lru_prev;
 
     uint32_t record_ttl;
+
+    reply_type type;
+
+    uint16_t offset;
+
+    void fill_data(uint8_t *) const;
 
 protected:
     record_node *node_next;
@@ -74,9 +95,19 @@ protected:
 
     virtual void set_value();
 
+    record_node(uint8_t *, uint8_t *, domain_name);
+
+    void shared_data_fill_offset(uint8_t *, uint16_t) const;
+
+    // uint8_t *shared_data_build(uint8_t *, size_t, size_t, int &) const;
+
+    // uint8_t *shared_data_build(uint8_t *, size_t, uint16_t &) const;
+
+    virtual const uint8_t *get_value() const = 0;
+
 public:
     record_node();
-    record_node(domain_name);
+    explicit record_node(domain_name);
 
     virtual ~record_node();
 
@@ -100,9 +131,19 @@ public:
         record_ttl = ttl;
     }
 
+    void set_tail(record_node *);
+
+    int next_count() const;
+
+    record_node *get_next() const
+    {
+        return node_next;
+    }
+
     virtual void to_string(string &) const = 0;
 
-    virtual int to_data(uint8_t *, size_t, size_t, int &) const = 0;
+    int to_data(
+        uint8_t *buffer, size_t buf_size, int, uint16_t &rr_count, uint16_t &ra_count) const;
 };
 
 class record_node_A : public record_node
@@ -111,16 +152,42 @@ class record_node_A : public record_node
 
     virtual void set_value() override;
 
+protected:
+    virtual const uint8_t *get_value() const override;
+
 public:
     record_node_A();
+    record_node_A(uint8_t *, uint8_t *, domain_name);
+
     record_node_A(domain_name, ip_address &);
     record_node_A(domain_name, uint32_t);
+
+    ~record_node_A();
 
     bool operator==(const record_node_A &) const;
     bool operator==(const ip_address &) const;
 
     virtual void to_string(string &) const override;
-    virtual int to_data(uint8_t *, size_t, size_t, int &) const override;
+
+    //virtual int to_data(uint8_t *buffer, size_t buf_size, int answer_offset) const override;
+};
+
+class record_node_CNAME : public record_node
+{
+    domain_name actual_name;
+    uint8_t *value;
+
+protected:
+    virtual const uint8_t *get_value() const override;
+
+public:
+    record_node_CNAME(uint8_t *, uint8_t *, domain_name);
+    virtual ~record_node_CNAME();
+
+    virtual void to_string(string &) const override;
+    domain_name get_actual_name() const;
+
+    //virtual int to_data(uint8_t *buffer, size_t buf_size, int answer_offset) const override;
 };
 
 #endif

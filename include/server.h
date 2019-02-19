@@ -14,8 +14,21 @@
 #include <semaphore.h>
 #include <sys/prctl.h>
 #include <queue>
+#include <unordered_map>
 
 void *work_thread_fn(void *);
+
+void uvcb_remote_nameserver_forward(uv_work_t *);
+
+void uvcb_remote_nameserver_forward_complete(uv_work_t *, int);
+
+void uvcb_remote_nameserver_sending_complete(uv_udp_send_t *, int);
+
+void uvcb_remote_nameserver_forward_reading(
+    uv_udp_t *, ssize_t, const uv_buf_t *, const sockaddr *, unsigned int);
+
+void uv_forward_response_sender(uv_udp_send_t *, int);
+
 
 struct delete_item {
     time_t t;
@@ -52,21 +65,130 @@ private:
     delete_item(const delete_item &) = delete;
 };
 
+struct incoming_request {
+    uv_buf_t *buf;
+    ssize_t nsize;
+    sockaddr *sock;
+
+    incoming_request(uv_buf_t *, ssize_t, sockaddr *);
+    ~incoming_request();
+};
+
+
+struct remote_nameserver {
+    int index;
+    int port;
+    sockaddr_in *sock;
+    ip_address ip;
+    uv_udp_t *udp_handle;
+
+    utils::atomic_int request_forward_count;
+    utils::atomic_int response_count;
+
+    remote_nameserver(remote_nameserver &&);
+
+    remote_nameserver(const ip_address &&, int = 53);
+    remote_nameserver(uint32_t, int = 53);
+    ~remote_nameserver();
+
+    bool operator==(const ip_address &);
+    bool operator==(uint32_t);
+
+    void swap(const remote_nameserver &);
+
+
+    int get_index() const
+    {
+        return index;
+    }
+
+    void set_index(int i)
+    {
+        index = i;
+    }
+
+    operator const sockaddr *() const
+    {
+        return reinterpret_cast<const sockaddr *>(sock);
+    }
+
+    const sockaddr *get_sockaddr()
+    {
+        return reinterpret_cast<const sockaddr *>(sock);
+    }
+
+    remote_nameserver *get_address()
+    {
+        return this;
+    }
+
+    void init_udp_handle(uv_loop_t *);
+
+    void start_recv()
+    {
+        uv_udp_recv_start(
+            udp_handle, uvcb_server_incoming_alloc, uvcb_remote_nameserver_forward_reading);
+    }
+
+    void stop_recv()
+    {
+        uv_udp_recv_stop(udp_handle);
+    }
+};
+
+
+struct forward_item {
+    dns::DnsPacket *packet;
+    uv_buf_t *buf;
+    const sockaddr *req_sock;
+    remote_nameserver *ns;
+    uv_buf_t *resp_buf;
+    time_t insert_time;
+    uint16_t forward_id;
+    uint16_t original_query_id;
+    pthread_spinlock_t _lock;
+
+    void destroy();
+
+    void lock()
+    {
+        pthread_spin_lock(&_lock);
+    }
+
+    void unlock()
+    {
+        pthread_spin_unlock(&_lock);
+    }
+
+
+    forward_item()
+    {
+        pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE);
+    }
+    ~forward_item()
+    {
+        pthread_spin_destroy(&_lock);
+    }
+};
+
 class global_server
 {
     friend void delete_timer_worker(uv_timer_t *);
 
     using static_address_type = std::tuple<string, uint32_t>;
-    using queue_item = std::tuple<uv_buf_t *, const sockaddr *>;
+    using queue_item = std::tuple<uv_buf_t *, const sockaddr *, ssize_t>;
 
-    std::vector<ip_address> remote_address;
+    std::vector<remote_nameserver> remote_address;
     std::vector<static_address_type> *static_address;
     std::queue<queue_item> requests;
+    std::unordered_map<uint16_t, forward_item *> forward_table;
+
+    utils::atomic_int forward_id;
 
     hash::hashtable *table;
 
-    int total_request_count;
-    int total_request_forward_count;
+    utils::atomic_int total_request_count;
+    utils::atomic_int total_request_forward_count;
 
     int default_ttl;
     int timer_timeout;
@@ -85,13 +207,21 @@ class global_server
     pthread_t working_thread;
 
     pthread_spinlock_t queue_lock;
+    pthread_spinlock_t forward_table_lock;
 
     sem_t queue_sem;
+
+    int forward_type;
 
     global_server(const global_server &) = delete;
     void operator=(const global_server &) = delete;
 
-    global_server() : server_socket(), working_thread(), queue_lock(), queue_sem()
+    global_server()
+        : forward_id(utils::rand_value() & 0xff),
+          server_socket(),
+          working_thread(),
+          queue_lock(),
+          queue_sem()
     {
         total_request_count = 0;
         total_request_forward_count = 0;
@@ -104,7 +234,11 @@ class global_server
         static_address = nullptr;
         timer_timeout = 5;
 
+        forward_type = FT_ALL;
+
         pthread_spin_init(&queue_lock, PTHREAD_PROCESS_PRIVATE);
+        pthread_spin_init(&forward_table_lock, PTHREAD_PROCESS_PRIVATE);
+
         sem_init(&queue_sem, 0, 0);
         table = nullptr;
     }
@@ -113,7 +247,15 @@ class global_server
 
     static global_server *server_instance;
 
+    void forward_item_all(forward_item *);
+
+    void forward_single_item(forward_item *, remote_nameserver &);
+
 public:
+    void forward_item_complete(ssize_t, const uv_buf_t *);
+
+    void forward_item_submit(forward_item *);
+
     uv_udp_t *get_server_socket()
     {
         return &server_socket;
@@ -135,7 +277,7 @@ public:
         return total_request_forward_count;
     }
 
-    int get_total_request() const
+    int get_total_request()
     {
         return total_request_count;
     }
@@ -225,7 +367,7 @@ public:
 
     void set_server_log_level(utils::log_level);
 
-    const std::vector<ip_address> get_remote_server() const
+    const std::vector<remote_nameserver> &get_remote_server() const
     {
         return remote_address;
     }

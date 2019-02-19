@@ -6,6 +6,8 @@
 #include <cctype>
 #include <cstdio>
 
+#include <random>
+
 using namespace utils;
 using std::vector;
 
@@ -21,6 +23,13 @@ namespace
 
 namespace utils
 {
+    uint32_t rand_value()
+    {
+        static std::random_device rd;
+        return rd();
+    }
+
+
     void split(vector<string> &vec, const CH *s, const CH c)
     {
         const auto bak = strdup(s);
@@ -54,7 +63,7 @@ namespace utils
             auto all_digit = true;
             for (auto &part : ip_part) {
                 const auto ret = check_all_digit(part);
-                all_digit = all_digit && (ret >= 0 && ret <= 250);
+                all_digit = all_digit && (ret >= 0 && ret <= 255);
                 address = (address << 8) | static_cast<uint8_t>(ret);
             }
             return all_digit;
@@ -94,6 +103,5 @@ namespace logging
     }
 
     void init_logging() {}
-
 
 }  // namespace logging

@@ -3,6 +3,7 @@
 
 #include <bitset>
 #include <iostream>
+#include <typeinfo>
 
 using namespace dns;
 using namespace dns_utils;
@@ -146,34 +147,33 @@ TEST(DNS_utils, query_string_generator)
     uint8_t buffer[buffer_size];
     char eo[] = "example.com";
     char weo[] = "www.example.org";
-    uint8_t weob[] = {0x03, 0x77, 0x77, 0x77, 0x07, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c,
-                      0x65, 0x03, 0x6f, 0x72, 0x67, 0x00, 0x00, 0x01, 0x00, 0x01};
 
-    uint8_t ecb[] = {0x07,
-                     0x65,
-                     0x78,
-                     0x61,
-                     0x6d,
-                     0x70,
-                     0x6c,
-                     0x65,
-                     0x03,
-                     0x63,
-                     0x6f,
-                     0x6d,
-                     0x00,
-                     0x00,
-                     0x01,
-                     0x00,
-                     0x01};
+    uint8_t ecb[] = {0x07, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00};
+    uint8_t weob[] = {0x03,
+                      0x77,
+                      0x77,
+                      0x77,
+                      0x07,
+                      0x65,
+                      0x78,
+                      0x61,
+                      0x6d,
+                      0x70,
+                      0x6c,
+                      0x65,
+                      0x03,
+                      0x6f,
+                      0x72,
+                      0x67,
+                      0x00};
 
     memset(buffer, 0xcc, buffer_size);
     auto ret = query_string_generator(eo, buffer, buffer_size);
-    EXPECT_EQ(ret, static_cast<int>(utils::strlen(eo) + 6));
+    EXPECT_EQ(ret, static_cast<int>(utils::strlen(eo) + 2));
     EXPECT_EQ(memcmp(ecb, buffer, sizeof(ecb)), 0);
     memset(buffer, 0xcc, buffer_size);
     ret = query_string_generator(weo, buffer, buffer_size);
-    EXPECT_EQ(ret, static_cast<int>(utils::strlen(weo) + 6));
+    EXPECT_EQ(ret, static_cast<int>(utils::strlen(weo) + 2));
     EXPECT_EQ(memcmp(weob, buffer, sizeof(weob)), 0);
 }
 
@@ -242,4 +242,115 @@ TEST(DNS_utils, dns_packet_builder_dns_packet)
 
     ASSERT_EQ(np->get_size(), packet->get_size());
     EXPECT_TRUE(memcmp(np->get_data(), packet->get_data(), np->get_size()) == 0);
+    delete packet;
+    delete np;
+}
+
+TEST(DNS_utils, query_string_parser)
+{
+    uint8_t eo[] = {0x07, 0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x6f, 0x72, 0x67, 0x00};
+    char eos[] = "example.org";
+
+    auto eot = query_string_parser(eo);
+    EXPECT_TRUE(utils::strcmp(eot, eos) == 0);
+    utils::strfree(eot);
+
+    uint8_t wwweo[] = {0x03, 0x77, 0x77, 0x77, 0x03, 0x77, 0x77, 0x77, 0x03, 0x77, 0x77, 0x77, 0x07,
+                       0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x6f, 0x72, 0x67, 0x00};
+    char wwweos[] = "www.www.www.example.org";
+
+    eot = query_string_parser(wwweo);
+    EXPECT_TRUE(utils::strcmp(eot, wwweos) == 0);
+    utils::strfree(eot);
+}
+
+TEST(DNS_utils, ip_string_to_uint32)
+{
+    char ip1[] = "1.2.3.4";
+    char ip2[] = "255.255.255.255";
+    char ip3[] = "0.0.0.0";
+    char ip4[] = "0.0.0.";
+    char ip5[] = "1.2.3.4.5";
+    char ip6[] = "256.2.3.4";
+
+    uint32_t tval;
+    EXPECT_FALSE(ip_string_to_uint32(ip4, tval));
+    EXPECT_FALSE(ip_string_to_uint32(ip5, tval));
+    EXPECT_FALSE(ip_string_to_uint32(ip6, tval));
+
+    uint32_t i1 = 1 << 24 | 2 << 16 | 3 << 8 | 4;
+    uint32_t i2 = 0xffffffff;
+    uint32_t i3 = 0;
+
+    uint32_t r1, r2, r3;
+
+    EXPECT_TRUE(ip_string_to_uint32(ip1, r1));
+    EXPECT_TRUE(ip_string_to_uint32(ip2, r2));
+    EXPECT_TRUE(ip_string_to_uint32(ip3, r3));
+
+    EXPECT_EQ(r1, i1);
+    EXPECT_EQ(r2, i2);
+    EXPECT_EQ(r3, i3);
+}
+
+
+TEST(DNS, generate_record_node)
+{
+    // example.org -> 93.184.216.34
+    uint8_t packet_bytes[] = {
+        0x14, 0x2d, 0x81, 0x80, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x07, 0x65, 0x78,
+        0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x6f, 0x72, 0x67, 0x00, 0x00, 0x01, 0x00, 0x01, 0xc0,
+        0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x0d, 0x40, 0x00, 0x04, 0x5d, 0xb8, 0xd8, 0x22};
+
+    DnsPacket* pack = DnsPacket::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
+    auto node = pack->generate_record_node();
+    record_node_A* p;
+
+    uint32_t ttl;
+    uint16_t type, clazz, length;
+    node->get_value(ttl, type, clazz, length);
+
+    EXPECT_EQ(ttl, 68928u);
+    EXPECT_EQ(type, DNS_TYPE_A);
+    EXPECT_EQ(clazz, DNS_CLASS_IN);
+    EXPECT_EQ(length, 4);
+
+    ASSERT_NO_THROW({ p = dynamic_cast<record_node_A*>(node); });
+    char ip[] = "93.184.216.34";
+    uint32_t iip;
+    EXPECT_TRUE(ip_string_to_uint32(ip, iip));
+    ip_address addr(iip);
+    ASSERT_TRUE(p->operator==(addr));
+    ASSERT_TRUE(node->operator==("example.org"));
+    ASSERT_EQ(node->next_count(), 1);
+
+    delete pack;
+    delete node;
+}
+
+TEST(DNS, generate_record_node_CNAME)
+{
+    // git.athenacle.xyz -> CNAME master.athenacle.xyz -> IP 10.70.20.11
+    uint8_t buf[] = {0x1b, 0xd9, 0x81, 0x80, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00,
+                     0x03, 0x67, 0x69, 0x74, 0x09, 0x61, 0x74, 0x68, 0x65, 0x6e, 0x61, 0x63,
+                     0x6c, 0x65, 0x03, 0x78, 0x79, 0x7a, 0x00, 0x00, 0x01, 0x00, 0x01, 0xc0,
+                     0x0c, 0x00, 0x05, 0x00, 0x01, 0x00, 0x00, 0x01, 0x2c, 0x00, 0x09, 0x06,
+                     0x6d, 0x61, 0x73, 0x74, 0x65, 0x72, 0xc0, 0x10, 0xc0, 0x2f, 0x00, 0x01,
+                     0x00, 0x01, 0x00, 0x01, 0x51, 0x80, 0x00, 0x04, 0x0a, 0x46, 0x14, 0x0b};
+
+    char name_1[] = "git.athenacle.xyz";
+    char name_2[] = "master.athenacle.xyz";
+
+    DnsPacket* pack = DnsPacket::fromDataBuffer(buf, sizeof(buf));
+    auto node = pack->generate_record_node();
+    record_node_CNAME* cname;
+
+    ASSERT_NO_THROW({ cname = dynamic_cast<record_node_CNAME*>(node); });
+    ASSERT_EQ(cname->next_count(), 2);
+
+    ASSERT_STREQ(cname->get_actual_name(), name_2);
+    ASSERT_STREQ(cname->get_name(), name_1);
+
+    delete node;
+    delete pack;
 }

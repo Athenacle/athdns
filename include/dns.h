@@ -17,22 +17,22 @@ namespace dns
 {
     namespace dns_values
     {
-        const uint8_t DNS_TYPE_A = 1;       // a host address
-        const uint8_t DNS_TYPE_NS = 2;      // an authoritative name server
-        const uint8_t DNS_TYPE_MD = 3;      // a mail destination (Obsolete - use MX)
-        const uint8_t DNS_TYPE_MF = 4;      // a mail forwarder (Obsolete - use MX)
-        const uint8_t DNS_TYPE_CNAME = 5;   // the canonical name for an alias
-        const uint8_t DNS_TYPE_SOA = 6;     // marks the start of a zone of authority
-        const uint8_t DNS_TYPE_MB = 7;      // a mailbox domain name (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_MG = 8;      // a mail group member (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_MR = 9;      // a mail rename domain name (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_NULL = 10;   // a null RR (EXPERIMENTAL)
-        const uint8_t DNS_TYPE_WKS = 11;    // a well known service description
-        const uint8_t DNS_TYPE_PTR = 12;    // a domain name pointer
-        const uint8_t DNS_TYPE_HINFO = 13;  // host information
-        const uint8_t DNS_TYPE_MINFO = 14;  // mailbox or mail list information
-        const uint8_t DNS_TYPE_MX = 15;     // mail exchange
-        const uint8_t DNS_TYPE_TXT = 16;    // text strings
+        const uint16_t DNS_TYPE_A = 1;       // a host address
+        const uint16_t DNS_TYPE_NS = 2;      // an authoritative name server
+        const uint16_t DNS_TYPE_MD = 3;      // a mail destination (Obsolete - use MX)
+        const uint16_t DNS_TYPE_MF = 4;      // a mail forwarder (Obsolete - use MX)
+        const uint16_t DNS_TYPE_CNAME = 5;   // the canonical name for an alias
+        const uint16_t DNS_TYPE_SOA = 6;     // marks the start of a zone of authority
+        const uint16_t DNS_TYPE_MB = 7;      // a mailbox domain name (EXPERIMENTAL)
+        const uint16_t DNS_TYPE_MG = 8;      // a mail group member (EXPERIMENTAL)
+        const uint16_t DNS_TYPE_MR = 9;      // a mail rename domain name (EXPERIMENTAL)
+        const uint16_t DNS_TYPE_NULL = 10;   // a null RR (EXPERIMENTAL)
+        const uint16_t DNS_TYPE_WKS = 11;    // a well known service description
+        const uint16_t DNS_TYPE_PTR = 12;    // a domain name pointer
+        const uint16_t DNS_TYPE_HINFO = 13;  // host information
+        const uint16_t DNS_TYPE_MINFO = 14;  // mailbox or mail list information
+        const uint16_t DNS_TYPE_MX = 15;     // mail exchange
+        const uint16_t DNS_TYPE_TXT = 16;    // text strings
 
 
         //dns reply code
@@ -76,6 +76,9 @@ namespace dns
         const int DNS_FLAGS_RESP_ANSWER_AUTHENTICATED = 10;
         const int DNS_FLAGS_RESP_NON_AUTHENTICATED = 11;
 
+
+        const int DNS_FORMAT_HEADER_LENGTH = 12;
+        const int DNS_FORMAT_ANSWER_VALUE_OFFSET = 12;
 
     }  // namespace dns_values
 
@@ -126,18 +129,19 @@ namespace dns
 
     namespace dns_utils
     {
-        const char *query_string_parser(uint8_t *);
+        const char *query_string_parser(uint8_t *, uint8_t * = nullptr);
+        //const char *query_string_parser(uint8_t *);
+
         const uint8_t *query_string_generator(const char *);
-        int query_string_generator(
-            const char *, uint8_t *, size_t, uint8_t = dns_values::DNS_TYPE_A, uint8_t = 1);
-        int query_string_generator(const Query &, uint8_t *, size_t);
+
+        int query_string_generator(const char *, uint8_t *, size_t);
+
+        bool ip_string_to_uint32(const char *, uint32_t &);
     };  // namespace dns_utils
 
 
     class Query
     {
-        friend int dns_utils::query_string_generator(const Query &, uint8_t *, size_t);
-
         uint16_t _type;
         uint16_t _class;
 
@@ -147,6 +151,11 @@ namespace dns
     public:
         static const uint8_t QUERY_TYPE_A;
         static const uint8_t QUERY_CLASS_IN;
+
+        static int query_section_builder(
+            domain_name dname, uint8_t *buf, size_t buf_size, uint16_t type, uint16_t clazz);
+
+        static int query_section_builder(const Query &query, uint8_t *buf, size_t buf_size);
 
         explicit Query(uint8_t *);
 
@@ -189,11 +198,14 @@ namespace dns
         uint16_t _id;
         uint16_t _flag;
 
+        bool parsed;
+
         DnsPacket()
         {
             _id = _flag = 0xffff;
             _size = 0;
             _data = nullptr;
+            parsed = false;
         }
 
         void test_flag() const
@@ -246,6 +258,8 @@ namespace dns
         bool isRD() const;
         bool isRA() const;
         bool isAD() const;
+
+        record_node *generate_record_node();
     };
 
     using reference = dns_package_builder &;
@@ -269,8 +283,13 @@ namespace dns
         uint8_t *additional_pointer;
         int addition_length;
 
+        uint8_t *buffer;
+
         static uint8_t *buffer_allocate(size_t);
         static void buffer_destroy(uint8_t *);
+
+        uint16_t answer_count;
+        uint16_t auth_count;
 
     public:
         dns_package_builder();
@@ -294,6 +313,8 @@ namespace dns
         reference set_query(const Query &);
 
         reference add_record(record_node *);
+
+        reference set_answer_record(record_node *);
 
         DnsPacket *build();
     };

@@ -17,11 +17,6 @@ namespace
         return ret;
     }
 
-    bool responseIS(uint16_t flag, int offset)
-    {
-        return ((flag >> offset) & 0x1) == 1;
-    }
-
 }  // namespace
 
 namespace dns
@@ -31,17 +26,53 @@ namespace dns
 
     namespace dns_utils
     {
-        int query_string_generator(const char* name,
-                                   uint8_t* buffer,
-                                   size_t buffer_size,
-                                   uint8_t query_type,
-                                   uint8_t query_class)
+        bool ip_string_to_uint32(const char* ip, uint32_t& ret)
+        {
+            return utils::check_ip_address(ip, ret);
+        }
+
+
+        const char* query_string_parser(uint8_t* begin, uint8_t* buffer)
+        {
+            int length = 0;
+            auto ptr = begin;
+            do {
+                if (unlikely((*ptr >> 4) == 0xc)) {
+                    assert(buffer != nullptr);
+                    ptr = buffer + ((*ptr & 0x3f) + *(ptr + 1));
+                }
+                length = length + *ptr + 1;
+                ptr = ptr + *ptr + 1;
+            } while (*ptr != 0x00);
+            char* ret = utils::str_allocate<char>(length + 1);
+            char* pointer = ret;
+            ptr = begin;
+            do {
+                if (unlikely((*ptr >> 4) == 0xc)) {
+                    assert(buffer != nullptr);
+                    ptr = buffer + ((*ptr & 0x3f) + *(ptr + 1));
+                }
+                auto count = *ptr;
+                ptr++;
+                while (count > 0) {
+                    *pointer = *ptr;
+                    pointer++;
+                    ptr++;
+                    count--;
+                }
+                *pointer = '.';
+                pointer++;
+            } while (*ptr != 0x00);
+            *(pointer - 1) = 0;
+            return ret;
+        }
+
+        int query_string_generator(const char* name, uint8_t* buffer, size_t buffer_size)
         {
             auto length = utils::strlen(name);
-            if (buffer_size < length + 5) {
+            if (unlikely(buffer_size < length + 2)) {
                 return -1;
             }
-
             uint8_t* begin = buffer;
             memcpy(begin + 1, name, strlen(name) + 1);
             while (true) {
@@ -57,17 +88,7 @@ namespace dns
                 }
                 begin = p;
             }
-            buffer[length + 2] = 0;
-            buffer[length + 3] = query_type;
-            buffer[length + 4] = 0;
-            buffer[length + 5] = query_class;
-            return length + 6;
-        }
-
-        int query_string_generator(const Query& query, uint8_t* buffer, size_t buffer_size)
-        {
-            return query_string_generator(
-                query.getName(), buffer, buffer_size, query.getType(), query.getClass());
+            return length + 2;
         }
 
     }  // namespace dns_utils
@@ -101,6 +122,7 @@ namespace dns
 
     void DnsPacket::parse()
     {
+        parsed = true;
         this->_id = getQueryID();
         this->_flag = getFlag();
         flag_pointer = _data + 2;
@@ -194,34 +216,89 @@ namespace dns
         return builder.build();
     }
 
+    record_node* DnsPacket::generate_record_node()
+    {
+        uint8_t* pointer = _data;
+        record_node* node = nullptr;
+        if (!parsed) {
+            parse();
+        }
+        pointer = pointer + 12 + utils::strlen(_query.getName()) + 6;
+        //pointer should be first byte of Answer section
+        //Note: 12 = DNS header length, 6 = 2 + 2 + 2 => query_name + DNS_TYPE + DNS_CLASS
+
+        int answer_count = 0;
+
+        uint8_t* begin = pointer;
+        while (true) {
+            record_node* new_node;
+            uint16_t* p = reinterpret_cast<uint16_t*>(begin);
+            uint16_t offset = ntohs(*p) & 0x3fff;  // offset example: 0xc00c
+            uint16_t type = ntohs(*(p + 1));
+            uint16_t dlength = ntohs(*(p + 5));
+
+            const char* name;
+
+            //next_pointer: begin + length of ( offset(2) + type(2) + class (2) + ttl(4) + data length(2) + data length
+            uint8_t* next_pointer = dlength + 2 + 2 + 2 + 4 + 2 + begin;
+
+            if (offset == 0xc) {
+                name = _query.getName();
+            } else {
+                name = nullptr;
+            }
+            answer_count++;
+            switch (type) {
+                case DNS_TYPE_A:
+                    new_node = new record_node_A(_data, begin, name);
+                    break;
+                case DNS_TYPE_CNAME:
+                    new_node = new record_node_CNAME(_data, begin, name);
+                    break;
+                default:
+                    assert(false);
+            }
+
+            begin = next_pointer;
+            if (node == nullptr) {
+                node = new_node;
+            } else {
+                node->set_tail(new_node);
+            }
+            if (begin >= _data + _size
+                || answer_count > getAnswerRRCount() + getAuthorityRRCount()) {
+                break;
+            }
+        }
+        return node;
+    }
+
+    int Query::query_section_builder(
+        domain_name dname, uint8_t* buf, size_t buf_size, uint16_t type, uint16_t clazz)
+    {
+        auto ret = query_string_generator(dname, buf, buf_size);
+        if (unlikely(ret == -1)) {
+            return -1;
+        }
+        auto pointer = reinterpret_cast<uint16_t*>(buf + ret);
+        pointer[0] = htons(type);
+        pointer[1] = htons(clazz);
+
+        return ret + 4;
+    }
+
+    int Query::query_section_builder(const Query& query, uint8_t* buf, size_t buf_size)
+    {
+        return query_section_builder(query._name, buf, buf_size, query._type, query._class);
+    }
+
 
     Query::Query(uint8_t* _from)
     {
         _label_count = 0;
         auto name_length = 0ul;
-        auto ptr = _from;
-        do {
-            _label_count++;
-            name_length = name_length + *ptr + 1;
-            ptr = ptr + *ptr + 1;
-        } while (*ptr != 0x00);
-        name_length--;
-        char* name_ptr = new char[name_length + 1];
-        _name = name_ptr;
-        ptr = _from;
-        do {
-            auto count = *ptr;
-            ptr++;
-            while (count > 0) {
-                *name_ptr = *ptr;
-                name_ptr++;
-                ptr++;
-                count--;
-            }
-            *name_ptr = '.';
-            name_ptr++;
-        } while (*ptr != 0x00);
-        *(name_ptr - 1) = 0;
+        _name = query_string_parser(_from);
+        name_length = utils::strlen(_name);
 
         _type = getTwoByte(_from + name_length + 2);
         _class = getTwoByte(_from + name_length + 4);
@@ -229,7 +306,7 @@ namespace dns
 
     Query::~Query()
     {
-        delete[] _name;
+        utils::strfree(_name);
     }
 
     const uint8_t Query::QUERY_CLASS_IN = 1;
@@ -246,6 +323,7 @@ namespace dns
 
         flag_pointer = header + 2;
         memset(header, 0, sizeof(header));
+        answer_count = auth_count = 0;
     }
 
     dns_package_builder::~dns_package_builder()
@@ -263,7 +341,6 @@ namespace dns
         return *this;
     }
 
-
     reference dns_package_builder::as_response()
     {
         flag_set(flag_pointer, DNS_FLAGS_BIT_QUERY, true);
@@ -278,7 +355,7 @@ namespace dns
 
     reference dns_package_builder::set_opcode(uint8_t code)
     {
-        assert(code >= 0 && code < 3);
+        assert(code < 3);
         *flag_pointer = *flag_pointer | (code << 3);
         return *this;
     }
@@ -326,7 +403,9 @@ namespace dns
         const static size_t buffer_size = 256;
         const static int query_count_offset = 5;
         static uint8_t buffer[buffer_size];
-        query_length = query_string_generator(name, buffer, buffer_size);
+        query_length = Query::query_section_builder(
+            name, buffer, buffer_size, dns::dns_values::DNS_TYPE_A, dns::dns_values::DNS_CLASS_IN);
+
         assert(header[query_count_offset] == 0);
         header[query_count_offset]++;
         query_pointer = utils::str_allocate<uint8_t>(query_length);
@@ -340,9 +419,11 @@ namespace dns
         const static size_t buffer_size = 256;
         const static int query_count_offset = 5;
         static uint8_t buffer[buffer_size];
-        query_length = query_string_generator(q, buffer, buffer_size);
+
+        query_length = Query::query_section_builder(q, buffer, buffer_size);
         assert(header[query_count_offset] == 0);
         header[query_count_offset]++;
+
         query_pointer = utils::str_allocate<uint8_t>(query_length);
         memcpy(query_pointer, buffer, query_length * sizeof(uint8_t));
         return *this;
@@ -350,9 +431,15 @@ namespace dns
 
     DnsPacket* dns_package_builder::build()
     {
+        const int answer_count_offset = 3;
+
         auto ret = new DnsPacket;
         ret->_size = 12 + query_length + answer_length + authority_length + addition_length;
         auto data = ret->_data = new uint8_t[ret->_size];
+
+        uint16_t* ap = reinterpret_cast<uint16_t*>(header);
+        ap[answer_count_offset] = htons(answer_count);
+
         memcpy(data, header, 12);
         memcpy(data + 12, query_pointer, query_length);
         memcpy(data + 12 + query_length, answer_pointer, answer_length);
@@ -360,6 +447,8 @@ namespace dns
         memcpy(data + 12 + query_length + answer_length + authority_length,
                additional_pointer,
                addition_length);
+
+
         return ret;
     }
 
@@ -368,11 +457,31 @@ namespace dns
         const int buffer_size = 256;
         static uint8_t buffer[buffer_size];
         int count = 0;
-        answer_length = r->to_data(buffer, buffer_size, 0xc, count);
+        uint16_t offset = 0xc;
+
+        answer_count = 0;
+        auth_count = 0;
+
+        answer_length = r->to_data(buffer, buffer_size, offset, answer_count, auth_count);
         answer_pointer = utils::str_allocate<uint8_t>(answer_length);
         memcpy(answer_pointer, buffer, answer_length * sizeof(uint8_t));
         uint16_t* answer_rr_pointer = reinterpret_cast<uint16_t*>(header) + 3;
         *answer_rr_pointer = htons(count);
         return *this;
     }
+
+    reference dns_package_builder::set_answer_record(record_node* node)
+    {
+        const size_t size = 512;
+        answer_pointer = utils::str_allocate<uint8_t>(512);  // buffer_allocate(512);
+        assert(query_length > 0);
+        assert(node != nullptr);
+
+        answer_count = auth_count = 0;
+
+        answer_length = node->to_data(answer_pointer, size, query_length, answer_count, auth_count);
+        return *this;
+    }
+
+
 }  // namespace dns

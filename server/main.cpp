@@ -29,9 +29,10 @@ void uvcb_server_incoming_recv(
 
     auto new_addr = utils::make(addr);
     auto new_buf = utils::make(buf);
+    new_buf->len = nread;
 
     pthread_spin_lock(queue_lock);
-    rqueue.emplace(std::make_tuple(new_buf, new_addr));
+    rqueue.emplace(std::make_tuple(new_buf, new_addr, nread));
     pthread_spin_unlock(queue_lock);
     sem_post(queue_sem);
     server.increase_request();
@@ -40,7 +41,6 @@ void uvcb_server_incoming_recv(
 void uvcb_timer_reporter(uv_timer_t*)
 {
     static auto& server = global_server::get_server();
-    static auto total_mem = uv_get_total_memory();
     int forward = server.get_total_forward_cound();
     int total = server.get_total_request();
     auto hit = total - forward;
