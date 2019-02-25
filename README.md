@@ -1,0 +1,2 @@
+# athdns
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/e72799f3932f48e89d39392be01507fe)](https://app.codacy.com/app/Athenacle/athdns?utm_source=github.com&utm_medium=referral&utm_content=Athenacle/athdns&utm_campaign=Badge_Grade_Dashboard)
