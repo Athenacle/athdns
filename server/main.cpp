@@ -50,7 +50,6 @@ void uvcb_server_incoming_recv(
     work->data = req;
 
     uv_queue_work(loop, work, uvcb_incoming_request_worker, uvcb_incoming_request_worker_complete);
-    server.increase_request();
 }
 
 void uvcb_timer_reporter(uv_timer_t*)

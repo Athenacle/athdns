@@ -199,7 +199,6 @@ struct forward_item {
     dns::DnsPacket *pack;
 
     uv_buf_t *resp_buf;
-    time_t insert_time;
 
     uint16_t forward_id;
     uint16_t original_query_id;
@@ -217,6 +216,14 @@ struct forward_item {
         pthread_spin_unlock(&_lock);
     }
 
+
+    bool get_response_send()
+    {
+        lock();
+        auto rs = response_send;
+        unlock();
+        return rs;
+    }
 
     forward_item(dns::DnsPacket *, const request_pointer &);
 
