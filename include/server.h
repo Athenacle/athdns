@@ -10,77 +10,245 @@
 #include "hash.h"
 #include "logging.h"
 
+
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/prctl.h>
+
+#include <map>
+#include <memory>
 #include <queue>
 #include <unordered_map>
 
-void *work_thread_fn(void *);
+void *remote_nameserver_thread(void *);
 
-void uvcb_remote_nameserver_forward(uv_work_t *);
+void uvcb_incoming_request_worker(uv_work_t *);
 
-void uvcb_remote_nameserver_forward_complete(uv_work_t *, int);
+void uvcb_incoming_request_worker_complete(uv_work_t *, int);
 
-void uvcb_remote_nameserver_sending_complete(uv_udp_send_t *, int);
+void uvcb_incoming_request_response_send_complete(uv_udp_send_t *, int);
 
-void uvcb_remote_nameserver_forward_reading(
-    uv_udp_t *, ssize_t, const uv_buf_t *, const sockaddr *, unsigned int);
+void uvcb_async_stop_loop(uv_async_t *);
 
-void uv_forward_response_sender(uv_udp_send_t *, int);
+void uvcb_remote_recv(uv_udp_t *, ssize_t, const uv_buf_t *, const sockaddr *, unsigned int);
 
+void uvcb_async_remote_stop_loop(uv_async_t *work);
+
+void uvcb_async_response_send(uv_async_t *);
+
+void uvcb_response_send_complete(uv_udp_send_t *, int);
+
+void uvcb_async_remote_response_send(uv_async_t *);
+
+void uvcb_remote_response_send_complete(uv_udp_send_t *, int);
+
+void uvcb_remote_nameserver_send_complete(uv_udp_send_t *, int);
+
+void uvcb_async_remote_send(uv_async_t *);
+
+void uvcb_timer_cleaner(uv_timer_t *);
+
+
+struct send_object {
+    const sockaddr *sock;
+    uv_buf_t *bufs;
+    int bufs_count;
+};
+
+struct uv_udp_sending {
+    pthread_spinlock_t *lock;
+    send_object *obj;
+    uv_udp_t *handle;
+};
+
+
+struct uv_udp_nameserver_runnable {
+    uv_loop_t *loop;
+    uv_udp_t *udp;
+    uv_async_t *async;
+    uv_async_t *async_send;
+    pthread_spinlock_t *lock;
+    pthread_t thread;
+    static utils::atomic_int count;
+
+public:
+    uv_udp_nameserver_runnable() {}
+
+    void set_data(void *p)
+    {
+        udp->data = p;
+    }
+
+    void swap(uv_udp_nameserver_runnable &ns)
+    {
+        std::swap(loop, ns.loop);
+        std::swap(udp, ns.udp);
+        std::swap(async, ns.async);
+    }
+
+    void init()
+    {
+        lock = new pthread_spinlock_t;
+        async = new uv_async_t;
+        udp = new uv_udp_t;
+        loop = new uv_loop_t;
+        async_send = new uv_async_t;
+
+        pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE);
+
+        uv_loop_init(loop);
+        uv_async_init(loop, async, [](uv_async_t *work) {
+            auto pointer = reinterpret_cast<uv_udp_nameserver_runnable *>(work->data);
+            uv_udp_recv_stop(pointer->udp);
+            uv_stop(pointer->loop);
+        });
+        uv_async_init(loop, async_send, uvcb_async_remote_send);
+
+        uv_udp_init(loop, udp);
+        async->data = this;
+        udp->data = this;
+    }
+
+    void start(uv_run_mode mode = UV_RUN_DEFAULT)
+    {
+        uv_udp_recv_start(udp, uvcb_server_incoming_alloc, uvcb_remote_recv);
+        uv_run(loop, mode);
+    }
+
+    void stop()
+    {
+        uv_async_send(async);
+        pthread_join(thread, nullptr);
+    }
+
+    void send(send_object *obj)
+    {
+        count++;
+        uv_udp_sending *sending = new uv_udp_sending;
+        sending->lock = lock;
+        sending->handle = udp;
+        sending->obj = obj;
+        pthread_spin_lock(lock);
+        async_send->data = sending;
+        uv_async_send(async_send);
+    }
+
+    void destroy()
+    {
+        pthread_spin_destroy(lock);
+        uv_loop_close(loop);
+        delete loop;
+        delete async_send;
+        delete lock;
+        delete udp;
+        delete async;
+    }
+};
+
+struct request {
+    uv_buf_t *buf;
+    ssize_t nsize;
+    const sockaddr *sock;
+
+    request(const uv_buf_t *, ssize_t, const sockaddr *);
+    ~request();
+};
+
+using request_pointer = std::shared_ptr<request>;
 
 struct delete_item {
     time_t t;
-    dns::DnsPacket *dns_packet;
+    request_pointer req;
+    dns::DnsPacket *pack;
     uv_buf_t *buf;
-    const sockaddr *addr;
+    dns::DnsPacket *response_packet;
 
-    delete_item(time_t tt, dns::DnsPacket *p, uv_buf_t *b, const sockaddr *a)
-        : t(tt), dns_packet(p), buf(b), addr(a)
-    {
-    }
-
-    void do_delete()
-    {
-        delete dns_packet;
-        utils::destroy(buf);
-        utils::destroy(addr);
-#ifndef NDEBUG
-        dns_packet = nullptr;
-        buf = nullptr;
-        addr = nullptr;
-#endif
-    }
-
-    ~delete_item()
-    {
-        assert(dns_packet == nullptr);
-        assert(buf == nullptr);
-        assert(addr == nullptr);
-    }
+    delete_item(dns::DnsPacket *, const request_pointer &);
+    ~delete_item();
 
 private:
     delete_item() = delete;
     delete_item(const delete_item &) = delete;
 };
 
-struct incoming_request {
+class found_response_item
+{
     uv_buf_t *buf;
-    ssize_t nsize;
-    sockaddr *sock;
+    dns::DnsPacket *packet;
+    request *req;
 
-    incoming_request(uv_buf_t *, ssize_t, sockaddr *);
-    ~incoming_request();
+public:
+    uv_buf_t *get_buffer() const
+    {
+        return buf;
+    }
+
+    const sockaddr *get_sock()
+    {
+        return req->sock;
+    }
+
+
+    found_response_item(dns::DnsPacket *, request *);
+    ~found_response_item();
 };
 
+struct forward_item {
+    request_pointer req;
+
+    dns::DnsPacket *pack;
+
+    uv_buf_t *resp_buf;
+    time_t insert_time;
+
+    uint16_t forward_id;
+    uint16_t original_query_id;
+    pthread_spinlock_t _lock;
+
+    bool response_send;
+
+    void lock()
+    {
+        pthread_spin_lock(&_lock);
+    }
+
+    void unlock()
+    {
+        pthread_spin_unlock(&_lock);
+    }
+
+
+    forward_item(dns::DnsPacket *, const request_pointer &);
+
+    ~forward_item();
+};
+
+using forward_item_pointer = std::shared_ptr<forward_item>;
+
+struct forward_sending_item {
+    forward_item_pointer pointer;
+};
+
+using forward_sending_item_pointer = std::shared_ptr<forward_sending_item>;
+
+struct forward_response {
+    forward_item_pointer pointer;
+    uv_buf_t *buf;
+
+    forward_response(forward_item_pointer &item, uv_buf_t *b) : pointer(item), buf(b) {}
+    ~forward_response();
+};
 
 struct remote_nameserver {
+    uv_udp_nameserver_runnable run;
+
     int index;
     int port;
     sockaddr_in *sock;
     ip_address ip;
-    uv_udp_t *udp_handle;
+
+    pthread_spinlock_t *sending_lock;
+    std::map<uint16_t, forward_item_pointer> sending;
 
     utils::atomic_int request_forward_count;
     utils::atomic_int response_count;
@@ -95,7 +263,6 @@ struct remote_nameserver {
     bool operator==(uint32_t);
 
     void swap(const remote_nameserver &);
-
 
     int get_index() const
     {
@@ -122,58 +289,41 @@ struct remote_nameserver {
         return this;
     }
 
-    void init_udp_handle(uv_loop_t *);
-
-    void start_recv()
+    void start_remote()
     {
-        uv_udp_recv_start(
-            udp_handle, uvcb_server_incoming_alloc, uvcb_remote_nameserver_forward_reading);
+        run.init();
+        run.set_data(this);
+        pthread_create(&run.thread, nullptr, remote_nameserver_thread, &run);
     }
 
-    void stop_recv()
+    void stop_remote()
     {
-        uv_udp_recv_stop(udp_handle);
+        run.stop();
+        pthread_join(run.thread, nullptr);
     }
+
+    void send(send_object *obj)
+    {
+        run.send(obj);
+    }
+
+private:
+    remote_nameserver(const remote_nameserver &) = delete;
 };
 
-
-struct forward_item {
-    dns::DnsPacket *packet;
-    uv_buf_t *buf;
-    const sockaddr *req_sock;
-    remote_nameserver *ns;
-    uv_buf_t *resp_buf;
-    time_t insert_time;
-    uint16_t forward_id;
-    uint16_t original_query_id;
-    pthread_spinlock_t _lock;
-
-    void destroy();
-
-    void lock()
-    {
-        pthread_spin_lock(&_lock);
-    }
-
-    void unlock()
-    {
-        pthread_spin_unlock(&_lock);
-    }
-
-
-    forward_item()
-    {
-        pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE);
-    }
-    ~forward_item()
-    {
-        pthread_spin_destroy(&_lock);
-    }
+struct forward_queue_item {
+    forward_item_pointer item;
+    int ns_index;
 };
 
 class global_server
 {
     friend void delete_timer_worker(uv_timer_t *);
+    friend void uvcb_remote_response_send_complete(uv_udp_send_t *, int);
+    friend void uvcb_async_stop_loop(uv_async_t *);
+    friend void uvcb_async_response_send(uv_async_t *);
+    friend void uvcb_response_send_complete(uv_udp_send_t *send, int);
+    friend void uvcb_timer_cleaner(uv_timer_t *);
 
     using static_address_type = std::tuple<string, uint32_t>;
     using queue_item = std::tuple<uv_buf_t *, const sockaddr *, ssize_t>;
@@ -181,7 +331,11 @@ class global_server
     std::vector<remote_nameserver> remote_address;
     std::vector<static_address_type> *static_address;
     std::queue<queue_item> requests;
-    std::unordered_map<uint16_t, forward_item *> forward_table;
+    std::unordered_map<uint16_t, forward_item_pointer> forward_table;
+
+    std::map<uint16_t, int> m;
+
+    std::queue<forward_queue_item> sending_queue;
 
     utils::atomic_int forward_id;
 
@@ -201,8 +355,12 @@ class global_server
 
     uv_loop_t *uv_main_loop;
     uv_udp_t server_socket;
+    uv_async_t *async_works;
+    uv_async_t *sending_works;
+    uv_async_t *sending_response_works;
 
     uv_timer_t timer;
+    uv_timer_t cleanup_timer;
 
     pthread_t working_thread;
 
@@ -213,15 +371,18 @@ class global_server
 
     int forward_type;
 
+    pthread_mutex_t sending_lock;
+
     global_server(const global_server &) = delete;
     void operator=(const global_server &) = delete;
 
     global_server()
-        : forward_id(utils::rand_value() & 0xff),
+        : forward_id(utils::rand_value() & 0xffff),
           server_socket(),
           working_thread(),
           queue_lock(),
-          queue_sem()
+          queue_sem(),
+          sending_lock(PTHREAD_MUTEX_INITIALIZER)
     {
         total_request_count = 0;
         total_request_forward_count = 0;
@@ -241,18 +402,28 @@ class global_server
 
         sem_init(&queue_sem, 0, 0);
         table = nullptr;
+        async_works = new uv_async_t;
+        async_works->data = this;
+
+        sending_works = new uv_async_t;
+        sending_response_works = new uv_async_t;
     }
 
     ~global_server();
 
     static global_server *server_instance;
 
-    void forward_item_all(forward_item *);
+    void forward_item_all(forward_item_pointer &);
 
-    void forward_single_item(forward_item *, remote_nameserver &);
+    void send_response(forward_response *);
 
 public:
-    void forward_item_complete(ssize_t, const uv_buf_t *);
+    void send_response(found_response_item *);
+
+    uv_loop_t *get_main_loop()
+    {
+        return uv_main_loop;
+    }
 
     void forward_item_submit(forward_item *);
 
@@ -261,6 +432,8 @@ public:
         return &server_socket;
     }
 
+
+    void send(send_object *);
 
     void increase_request()
     {
@@ -297,7 +470,6 @@ public:
     {
         return *table;
     }
-
 
     pthread_spinlock_t *get_spinlock()
     {
@@ -376,14 +548,16 @@ public:
 
     void init_server();
 
-
     void start_server_loop()
     {
         uv_run(uv_main_loop, UV_RUN_DEFAULT);
-        pthread_join(working_thread, nullptr);
     }
 
     void do_stop();
+
+    void response_from_remote(uv_buf_t *, remote_nameserver *);
+
+    void cleanup();
 };
 
 

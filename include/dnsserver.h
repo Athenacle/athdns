@@ -13,6 +13,7 @@
 #include <uv.h>
 
 #include <cinttypes>
+#include <cstring>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -53,6 +54,8 @@ namespace dns
 // global functions
 const int default_dns_port = 53;
 
+const size_t recv_buffer_size = 512;
+
 void uvcb_timer_reporter(uv_timer_t *);
 
 void uvcb_server_incoming_alloc(uv_handle_t *, size_t, uv_buf_t *);
@@ -64,6 +67,14 @@ void uvcb_server_incoming_recv(
 
 namespace utils
 {
+    void init_buffer_pool(int);
+
+    char *get_buffer();
+
+    void free_buffer(char *);
+
+    void destroy_buffer();
+
     template <class T>
     T *str_allocate(size_t count)
     {
@@ -152,7 +163,9 @@ namespace utils
         pthread_spinlock_t lock;
 
     public:
-        atomic_number(T v = 0) : lock()
+        ~atomic_number() {}
+
+        explicit atomic_number(T v = 0) : lock()
         {
             pthread_spin_init(&lock, PTHREAD_PROCESS_PRIVATE);
             value = v;
@@ -166,16 +179,35 @@ namespace utils
             return ret;
         }
 
-        void reset(T v)
+        T reset(T v)
         {
             pthread_spin_lock(&lock);
             value = v;
             pthread_spin_unlock(&lock);
+            return v;
         }
 
         operator T()
         {
             return get();
+        }
+
+        T operator--()
+        {
+            pthread_spin_lock(&lock);
+            value -= 1;
+            auto ret = value;
+            pthread_spin_unlock(&lock);
+            return ret;
+        }
+
+        T operator--(int)
+        {
+            pthread_spin_lock(&lock);
+            auto ret = value;
+            value -= 1;
+            pthread_spin_unlock(&lock);
+            return ret;
         }
 
         T operator++()
@@ -195,6 +227,11 @@ namespace utils
             pthread_spin_unlock(&lock);
             return ret;
         }
+
+        T operator=(T v)
+        {
+            return v;
+        }
     };
 
     using atomic_int = atomic_number<int>;
@@ -202,6 +239,67 @@ namespace utils
 
     uint32_t rand_value();
 
+    class bit_container
+    {
+        size_t bc_size;
+        size_t buffer_size;
+        uint32_t *buffer;
+
+    public:
+        size_t size() const
+        {
+            return bc_size;
+        }
+
+        bit_container(size_t total)
+        {
+            bc_size = total;
+            buffer_size = bc_size + 32;
+            buffer = new uint32_t[buffer_size / 32];
+            memset(buffer, 0, buffer_size / 32);
+        }
+        ~bit_container()
+        {
+            delete[] buffer;
+        }
+
+        void set(size_t offset, bool value)
+        {
+            size_t int_offset = offset / 32;
+            size_t bit_offset = offset % 32;
+            uint32_t mask = 1 << bit_offset;
+            if (value) {
+                // set to 1
+                *(buffer + int_offset) = *(buffer + int_offset) | mask;
+            } else {
+                mask = ~mask;
+                *(buffer + int_offset) &= mask;
+            }
+        }
+
+        bool test(size_t offset) const
+        {
+            size_t int_offset = offset / 32;
+            size_t bit_offset = offset % 32;
+            uint32_t v = *(buffer + int_offset) >> bit_offset;
+            return (v & 1) == 1;
+        }
+
+        void resize(size_t new_size)
+        {
+            if (new_size < bc_size) {
+                return;
+            }
+            auto old_buffer_size = buffer_size;
+            bc_size = new_size;
+            buffer_size = bc_size + 32;
+            auto old_buffer = buffer;
+            buffer = new uint32_t[buffer_size / 32];
+            memset(buffer, 0, buffer_size / 32);
+            memcpy(buffer, old_buffer, old_buffer_size / 32);
+            delete[] old_buffer;
+        }
+    };
 }  // namespace utils
 
 namespace hash

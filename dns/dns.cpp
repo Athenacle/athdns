@@ -448,7 +448,6 @@ namespace dns
                additional_pointer,
                addition_length);
 
-
         return ret;
     }
 

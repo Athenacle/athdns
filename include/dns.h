@@ -219,6 +219,7 @@ namespace dns
         ~DnsPacket();
 
         static DnsPacket *fromDataBuffer(uint8_t *, uint32_t);
+        static DnsPacket *fromDataBuffer(uv_buf_t *);
 
         static DnsPacket *build_response_with_records(DnsPacket *, record_node *);
 
