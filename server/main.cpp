@@ -69,13 +69,6 @@ void uvcb_timer_reporter(uv_timer_t*)
         0);
 }
 
-void atexit_handler()
-{
-    global_server::destroy_server();
-    utils::destroy_buffer();
-}
-
-
 int main(int argc, CH* const argv[])
 {
     logging::init_logging();
@@ -83,11 +76,14 @@ int main(int argc, CH* const argv[])
     utils::config_system(argc, argv);
     utils::init_buffer_pool(1024);
 
-    atexit(atexit_handler);
     auto& server = global_server::get_server();
 
     server.init_server();
     server.start_server_loop();
+
+    global_server::destroy_server();
+    utils::destroy_buffer();
+    logging::destroy_logger();
 
     return 0;
 }
