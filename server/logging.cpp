@@ -131,7 +131,7 @@ void log_sink::write(const logging_object& obj)
     }
 
 #ifdef GETTIMEOFDAY
-    buffer = fmt::format("{0}:{1} [{2}{3}{4}] - {5}\n",
+    buffer = fmt::format("{0}:{1:=06d} [{2}{3:5}{4}] - {5}\n",
                          time_buffer,
                          obj.t.tv_usec,
                          color,
