@@ -275,6 +275,9 @@ global_server::~global_server()
     forward_table.clear();
     pthread_spin_unlock(&forward_table_lock);
     pthread_spin_destroy(&forward_table_lock);
+    pthread_mutex_destroy(response_sending_queue_lock);
+
+    delete response_sending_queue_lock;
     delete async_works;
     delete sending_works;
     delete sending_response_works;
@@ -331,19 +334,17 @@ void global_server::forward_item_submit(forward_item* item)
 
 void global_server::send_response(found_response_item* item)
 {
-    uv_udp_send_t* send = new uv_udp_send_t;
-    send->data = item;
-    pthread_mutex_lock(&sending_lock);
-    sending_works->data = send;
+    pthread_mutex_lock(response_sending_queue_lock);
+    response_sending_queue.emplace(item);
+    pthread_mutex_unlock(response_sending_queue_lock);
     uv_async_send(sending_works);
 }
 
 void global_server::send_response(forward_response* resp)
 {
-    uv_udp_send_t* send = new uv_udp_send_t;
-    send->data = resp;
-    pthread_mutex_lock(&sending_lock);
-    sending_response_works->data = send;
+    pthread_mutex_lock(response_sending_queue_lock);
+    forward_response_queue.emplace(resp);
+    pthread_mutex_unlock(response_sending_queue_lock);
     uv_async_send(sending_response_works);
 }
 
@@ -378,8 +379,8 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
 
 void uvcb_incoming_request_worker(uv_work_t* work)
 {
-    static auto& server = global_server::get_server();
-    static auto& table = server.get_hashtable();
+    auto& server = global_server::get_server();
+    auto& table = server.get_hashtable();
 
     server.increase_request();
     request* req = reinterpret_cast<request*>(work->data);
@@ -464,48 +465,60 @@ void uvcb_async_remote_stop_loop(uv_async_t* work)
     uv_stop(pointer->loop);
 }
 
-void uvcb_async_response_send(uv_async_t* work)
+void uvcb_async_response_send(uv_async_t*)
 {
-    auto send = reinterpret_cast<uv_udp_send_t*>(work->data);
-    auto item = reinterpret_cast<found_response_item*>(send->data);
-    uv_udp_send(send,
-                &global_server::get_server().server_socket,
-                item->get_buffer(),
-                1,
-                item->get_sock(),
-                uvcb_response_send_complete);
+    auto queue = global_server::get_server().response_sending_queue;
+    auto lock = global_server::get_server().response_sending_queue_lock;
+    pthread_mutex_lock(lock);
+    while (queue.size() > 0) {
+        auto item = queue.front();
+        queue.pop();
+        auto send = new uv_udp_send_t;
+        send->data = item;
+        uv_udp_send(send,
+                    &global_server::get_server().server_socket,
+                    item->get_buffer(),
+                    1,
+                    item->get_sock(),
+                    uvcb_response_send_complete);
+    }
+
+    pthread_mutex_unlock(lock);
 }
 
 void uvcb_response_send_complete(uv_udp_send_t* send, int)
 {
-    static pthread_mutex_t* mutex = &global_server::get_server().sending_lock;
-    pthread_mutex_unlock(mutex);
     auto item = reinterpret_cast<found_response_item*>(send->data);
     delete item;
     delete send;
 }
 
-void uvcb_async_remote_response_send(uv_async_t* async)
+void uvcb_async_remote_response_send(uv_async_t*)
 {
-    auto send = reinterpret_cast<uv_udp_send_t*>(async->data);
-    auto item = reinterpret_cast<forward_response*>(send->data);
-    item->pointer->lock();
-    item->pointer->response_send = true;
-    item->pointer->unlock();
-    uv_udp_send(send,
-                global_server::get_server().get_server_socket(),
-                item->buf,
-                1,
-                item->pointer->req->sock,
-                uvcb_remote_response_send_complete);
+    auto lock = global_server::get_server().response_sending_queue_lock;
+    auto& queue = global_server::get_server().forward_response_queue;
+
+    pthread_mutex_lock(lock);
+    while (queue.size() > 0) {
+        auto item = queue.front();
+        queue.pop();
+        auto send = new uv_udp_send_t;
+        item->pointer->lock();
+        item->pointer->response_send = true;
+        item->pointer->unlock();
+        uv_udp_send(send,
+                    global_server::get_server().get_server_socket(),
+                    item->buf,
+                    1,
+                    item->pointer->req->sock,
+                    uvcb_remote_response_send_complete);
+    }
+    pthread_mutex_unlock(lock);
 }
 
 void uvcb_remote_response_send_complete(uv_udp_send_t* send, int)
 {
-    static pthread_mutex_t* mutex = &global_server::get_server().sending_lock;
-    pthread_mutex_unlock(mutex);
-    auto item = reinterpret_cast<forward_response*>(send->data);
-    delete item;
+    //auto item = reinterpret_cast<forward_response*>(send->data);
     delete send;
 }
 
@@ -514,9 +527,10 @@ void uvcb_remote_nameserver_send_complete(uv_udp_send_t* send, int flag)
     if (unlikely(flag < 0)) {
         WARN("send error {0}", uv_err_name(flag));
     }
-    auto sending_obj = reinterpret_cast<uv_udp_sending*>(send->data);
-    delete sending_obj->obj;
-    delete sending_obj;
+
+    auto sending = reinterpret_cast<uv_udp_sending*>(send->data);
+    delete sending->obj;
+    delete sending;
     delete send;
 }
 
@@ -524,19 +538,24 @@ utils::atomic_int uv_udp_nameserver_runnable::count;
 
 void uvcb_async_remote_send(uv_async_t* send)
 {
-    auto sending_obj = reinterpret_cast<uv_udp_sending*>(send->data);
-    pthread_spin_unlock(sending_obj->lock);
-    uv_udp_send_t* sending = new uv_udp_send_t;
-    sending->data = sending_obj;
-    auto flag = uv_udp_send(sending,
-                            sending_obj->handle,
-                            sending_obj->obj->bufs,
-                            sending_obj->obj->bufs_count,
-                            sending_obj->obj->sock,
-                            uvcb_remote_nameserver_send_complete);
-    if (unlikely(flag < 0)) {
-        ERROR("send failed: {0}", uv_err_name(flag));
+    auto sending_obj = reinterpret_cast<uv_udp_nameserver_runnable*>(send->data);
+    pthread_mutex_lock(sending_obj->lock);
+    while (sending_obj->sending_queue.size() > 0) {
+        auto i = sending_obj->sending_queue.front();
+        sending_obj->sending_queue.pop();
+        uv_udp_send_t* sending = new uv_udp_send_t;
+        sending->data = i;
+        auto flag = uv_udp_send(sending,
+                                i->handle,
+                                i->obj->bufs,
+                                i->obj->bufs_count,
+                                i->obj->sock,
+                                uvcb_remote_nameserver_send_complete);
+        if (unlikely(flag < 0)) {
+            ERROR("send failed: {0}", uv_err_name(flag));
+        }
     }
+    pthread_mutex_unlock(sending_obj->lock);
 }
 
 void uvcb_timer_cleaner(uv_timer_t*)

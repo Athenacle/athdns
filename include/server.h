@@ -56,7 +56,7 @@ struct send_object {
 };
 
 struct uv_udp_sending {
-    pthread_spinlock_t *lock;
+    pthread_mutex_t *lock;
     send_object *obj;
     uv_udp_t *handle;
 };
@@ -67,9 +67,11 @@ struct uv_udp_nameserver_runnable {
     uv_udp_t *udp;
     uv_async_t *async;
     uv_async_t *async_send;
-    pthread_spinlock_t *lock;
+    pthread_mutex_t *lock;
     pthread_t thread;
     static utils::atomic_int count;
+
+    std::queue<uv_udp_sending *> sending_queue;
 
 public:
     uv_udp_nameserver_runnable() {}
@@ -88,24 +90,30 @@ public:
 
     void init()
     {
-        lock = new pthread_spinlock_t;
+        lock = new pthread_mutex_t;
         async = new uv_async_t;
         udp = new uv_udp_t;
         loop = new uv_loop_t;
-        async_send = new uv_async_t;
 
-        pthread_spin_init(lock, PTHREAD_PROCESS_PRIVATE);
-
+        pthread_mutex_init(lock, nullptr);
         uv_loop_init(loop);
+
+        pthread_mutex_lock(lock);
+        async_send = new uv_async_t;
         uv_async_init(loop, async, [](uv_async_t *work) {
             auto pointer = reinterpret_cast<uv_udp_nameserver_runnable *>(work->data);
             uv_udp_recv_stop(pointer->udp);
             uv_stop(pointer->loop);
         });
+
         uv_async_init(loop, async_send, uvcb_async_remote_send);
+        async_send->data = this;
+        async->data = this;
+
+        pthread_mutex_unlock(lock);
 
         uv_udp_init(loop, udp);
-        async->data = this;
+
         udp->data = this;
     }
 
@@ -129,14 +137,16 @@ public:
         sending->handle = udp;
         sending->obj = obj;
 
-        async_send->data = sending;
-        pthread_spin_lock(lock);
+        pthread_mutex_lock(lock);
+        sending_queue.emplace(sending);
+        pthread_mutex_unlock(lock);
+
         uv_async_send(async_send);
     }
 
     void destroy()
     {
-        pthread_spin_destroy(lock);
+        pthread_mutex_destroy(lock);
         uv_loop_close(loop);
         delete loop;
         delete async_send;
@@ -332,6 +342,7 @@ class global_server
     friend void uvcb_async_response_send(uv_async_t *);
     friend void uvcb_response_send_complete(uv_udp_send_t *send, int);
     friend void uvcb_timer_cleaner(uv_timer_t *);
+    friend void uvcb_async_remote_response_send(uv_async_t *async);
 
     using static_address_type = std::tuple<string, uint32_t>;
     using queue_item = std::tuple<uv_buf_t *, const sockaddr *, ssize_t>;
@@ -341,7 +352,10 @@ class global_server
     std::queue<queue_item> requests;
     std::unordered_map<uint16_t, forward_item_pointer> forward_table;
 
-    std::map<uint16_t, int> m;
+    std::queue<found_response_item *> response_sending_queue;
+    std::queue<forward_response *> forward_response_queue;
+
+    pthread_mutex_t *response_sending_queue_lock;
 
     std::queue<forward_queue_item> sending_queue;
 
@@ -392,6 +406,8 @@ class global_server
           queue_sem(),
           sending_lock(PTHREAD_MUTEX_INITIALIZER)
     {
+        response_sending_queue_lock = new pthread_mutex_t;
+
         total_request_count = 0;
         total_request_forward_count = 0;
         timeout_requery = false;
@@ -407,6 +423,8 @@ class global_server
 
         pthread_spin_init(&queue_lock, PTHREAD_PROCESS_PRIVATE);
         pthread_spin_init(&forward_table_lock, PTHREAD_PROCESS_PRIVATE);
+        pthread_mutex_init(response_sending_queue_lock, nullptr);
+
 
         sem_init(&queue_sem, 0, 0);
         table = nullptr;
