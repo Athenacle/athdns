@@ -1,116 +1,102 @@
 
-CMAKE_MINIMUM_REQUIRED(VERSION 3.4)
+cmake_minimum_required(VERSION 3.4)
 
-PROJECT(dns)
+project(athdns C CXX)
 
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
-SET(WXCC_INCLUDE_ROOT ${CMAKE_SOURCE_DIR}/include/)
+option(ATHDNS_ENABLE_TEST "Enable Testing" OFF)
 
-SET(CMAKE_CXX_STANDARD 14)
-SET(PROJECT_NAME dns)
-SET(PROJECT_VERSION 0.0.0)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
+set(ATHDNS_INCLUDE_ROOT ${CMAKE_SOURCE_DIR}/include/)
 
-STRING(TIMESTAMP WXCC_BUILD_TIME "%Y-%m-%d %H:%M:%SZ")
+set(CMAKE_CXX_STANDARD 14)
+set(PROJECT_NAME athdns)
+set(PROJECT_VERSION 0.0.0)
 
-SET(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+string(TIMESTAMP ATHDNS_BUILD_TIME "%Y-%m-%d %H:%M:%SZ")
 
-IF(UNIX)
-  SET(WXCC_BUILD_ON_UNIX "Build ON UNIX" ON)
-  SET(WXCC_BUILD_ON_WINDOWS OFF)
-ELSE()
-  IF(WINDOWS)
-    SET(WXCC_BUILD_ON_UNIX OFF)
-    SET(WXCC_BUILD_ON_WINDOWS "Build ON Windows" ON)
-  ENDIF()
-ENDIF()
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(UNIX)
+  set(ATHDNS_BUILD_ON_UNIX "Build ON UNIX" ON)
+  set(ATHDNS_BUILD_ON_WINDOWS OFF)
+else()
+  if(WINDOWS)
+    set(ATHDNS_BUILD_ON_UNIX OFF)
+    set(ATHDNS_BUILD_ON_WINDOWS "Build ON Windows" ON)
+  endif()
+endif()
 
-INCLUDE(Spdlog)
-INCLUDE(CompilerOptionCheck)
-INCLUDE(ConfigCheck)
-INCLUDE(FindLibuv)
-INCLUDE(FindJemalloc)
-INCLUDE(TestBigEndian)
+include(Fmt)
+include(CompilerOptionCheck)
+include(ConfigCheck)
+include(FindLibuv)
+include(FindJemalloc)
+include(TestBigEndian)
 
-IF(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
-  ADD_DEFINITIONS(-Wno-undef)
-  ADD_DEFINITIONS(-Wno-unused-macros)
-ENDIF()
+if(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
+  add_definitions(-Wno-undef)
+  add_definitions(-Wno-unused-macros)
+endif()
 
-ADD_DEFINITIONS(-DHAVE_CONFIG_H)
-ADD_DEFINITIONS(-DDEBUG_THIS)
-ADD_DEFINITIONS(-pthread)
+test_big_endian(ON_BIG_ENDIAN)
 
-TEST_BIG_ENDIAN(ON_BIG_ENDIAN)
+include_directories(${ATHDNS_INCLUDE_ROOT})
 
-INCLUDE_DIRECTORIES(${WXCC_INCLUDE_ROOT})
+aux_source_directory(dns ATHDNS_DRIVER_LIB_LIST)
+aux_source_directory(server ATHDNS_DRIVER_LIB_LIST)
 
-AUX_SOURCE_DIRECTORY(dns WXCC_DRIVER_LIB_LIST)
-AUX_SOURCE_DIRECTORY(server WXCC_DRIVER_LIB_LIST)
+list(REMOVE_ITEM ATHDNS_DRIVER_LIB_LIST "server/main.cpp")
 
-LIST(REMOVE_ITEM WXCC_DRIVER_LIB_LIST "server/main.cpp")
+include(FindFLEX)
+include(FindBISON)
 
-AUX_SOURCE_DIRECTORY(${CMAKE_SOURCE_DIR}/dns/ WXCC_LIB_SOURCE_LIST)
+find_package(FLEX)
+find_package(BISON)
 
-INCLUDE(FindFLEX)
-INCLUDE(FindBISON)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deps)
+file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser)
 
-FIND_PACKAGE(FLEX)
-FIND_PACKAGE(BISON)
-BISON_TARGET(ConfigParser ${CMAKE_SOURCE_DIR}/server/config_file.y
-  ${CMAKE_CURRENT_BINARY_DIR}/bison_parser.c)
-FLEX_TARGET(ConfigLexer ${CMAKE_SOURCE_DIR}/server/config_file.l
-  ${CMAKE_CURRENT_BINARY_DIR}/flex_lexer.c)
+bison_target(ConfigParser ${CMAKE_SOURCE_DIR}/server/config_file.y
+  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/bison_parser.c)
+flex_target(ConfigLexer ${CMAKE_SOURCE_DIR}/server/config_file.l
+  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/flex_lexer.c)
 
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
+include_directories(${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser ${LIBUV_INCLUDE_DIR})
 
-ADD_FLEX_BISON_DEPENDENCY(ConfigLexer ConfigParser)
+add_flex_bison_dependency(ConfigLexer ConfigParser)
 
-LIST(APPEND WXCC_LIB_SOURCE_LIST
-  ${CMAKE_CURRENT_BINARY_DIR}/flex_lexer.c
-  ${CMAKE_CURRENT_BINARY_DIR}/bison_parser.c)
+list(APPEND ATHDNS_LIB_SOURCE_LIST
+  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/flex_lexer.c
+  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/bison_parser.c)
 
-ADD_LIBRARY(utils STATIC ${WXCC_LIB_SOURCE_LIST} ${WXCC_DRIVER_LIB_LIST})
+add_library(utils STATIC ${ATHDNS_LIB_SOURCE_LIST} ${ATHDNS_DRIVER_LIB_LIST})
 
-ADD_EXECUTABLE(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/server/main.cpp)
+add_dependencies(utils fmt)
 
-SET(WXCC_LIBS ${WXCC_LIBS} utils)
+add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/server/main.cpp)
 
-INCLUDE_DIRECTORIES(${CMAKE_SOURCE_DIR}/test ${LIBUV_INCLUDE_DIR})
+set(ATHDNS_LIBS ${ATHDNS_LIBS} utils)
 
-IF(${JEMALLOC_FOUND})
-  SET(HAVE_JEMALLOC ON)
-  INCLUDE_DIRECTORIES(${JEMALLOC_INCLUDE_DIR})
-  LIST(APPEND WXCC_LIBS jemalloc)
-  ADD_DEFINITIONS(-fno-builtin-malloc)
-  ADD_DEFINITIONS(-fno-builtin-free)
-  ADD_DEFINITIONS(-fno-builtin-calloc)
-  ADD_DEFINITIONS(-fno-builtin-realloc)
-ENDIF()
+list(APPEND ATHDNS_LIBS libfmt)
 
-CONFIGURE_FILE(${WXCC_INCLUDE_ROOT}/config.h.in
-  ${WXCC_INCLUDE_ROOT}/config.h)
+if(${JEMALLOC_FOUND})
+  set(HAVE_JEMALLOC ON)
+  include_directories(${JEMALLOC_INCLUDE_DIR})
+  list(APPEND ATHDNS_LIBS jemalloc)
+  add_definitions(-fno-builtin-malloc)
+  add_definitions(-fno-builtin-free)
+  add_definitions(-fno-builtin-calloc)
+  add_definitions(-fno-builtin-realloc)
+endif()
 
-TARGET_LINK_LIBRARIES(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${WXCC_LIBS} pthread)
-#test below
+configure_file(${ATHDNS_INCLUDE_ROOT}/config.h.in
+  ${ATHDNS_INCLUDE_ROOT}/config.h)
 
-INCLUDE(Gtest)
+add_definitions(-DHAVE_CONFIG_H)
 
-IF(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
-  ADD_DEFINITIONS(-Wno-c++98-compat)
-  ADD_DEFINITIONS(-Wno-c++98-compat-pedantic)
-  ADD_DEFINITIONS(-Wno-c++98-compat-extra-semi)
-  ADD_DEFINITIONS(-Wno-weak-vtables)
-  # ADD_DEFINITIONS(-Wno-everythings)
-  ADD_DEFINITIONS(-Wno-global-constructors)
-ENDIF()
+target_link_libraries(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${ATHDNS_LIBS} pthread)
 
-ADD_EXECUTABLE(dnstest
-  ${CMAKE_SOURCE_DIR}/tests/test_dns.cpp
-  ${CMAKE_SOURCE_DIR}/tests/utils.cpp
-  ${CMAKE_SOURCE_DIR}/tests/test_utils.cpp
-  ${CMAKE_SOURCE_DIR}/tests/hash_test.cpp
-  ${CMAKE_SOURCE_DIR}/tests/dns_record.cpp
-  ${CMAKE_SOURCE_DIR}/tests/main.cpp)
-
-TARGET_LINK_LIBRARIES(dnstest libgtest ${WXCC_LIBS} )
+if (${ATHDNS_ENABLE_TESTING})
+  enable_testing()
+  add_subdirectory(${CMAKE_SOURCE_DIR}/tests)
+endif()

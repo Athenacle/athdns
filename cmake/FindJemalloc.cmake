@@ -14,7 +14,7 @@
 set( JEMALLOC_FOUND 0 )
 
 if ( UNIX )
-  FIND_PATH( JEMALLOC_INCLUDE_DIR
+  find_path( JEMALLOC_INCLUDE_DIR
     NAMES
       jemalloc/jemalloc.h
     PATHS
@@ -28,7 +28,7 @@ if ( UNIX )
   DOC
     "Specify include-directories that might contain jemalloc.h here."
   )
-  FIND_LIBRARY( JEMALLOC_LIBRARY
+  find_library( JEMALLOC_LIBRARY
     NAMES
       jemalloc libjemalloc JEMALLOC
     PATHS
@@ -46,7 +46,6 @@ if ( UNIX )
     if ( JEMALLOC_INCLUDE_DIR )
       set( JEMALLOC_FOUND 1 )
       message( STATUS "Found JEMALLOC library: ${JEMALLOC_LIBRARY}")
-      message( STATUS "Found JEMALLOC headers: ${JEMALLOC_INCLUDE_DIR}")
     else ( JEMALLOC_INCLUDE_DIR )
       message(FATAL_ERROR "Could not find jemalloc headers! Please install jemalloc libraries and headers")
     endif ( JEMALLOC_INCLUDE_DIR )
