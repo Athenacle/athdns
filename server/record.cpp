@@ -1,6 +1,7 @@
 
 #include "record.h"
 #include "dns.h"
+#include "utils.h"
 
 #include <arpa/inet.h>
 #include <cassert>

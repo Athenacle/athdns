@@ -1,12 +1,9 @@
 #ifndef HASH_H
 #define HASH_H
 
-#ifdef HAVE_CONFIG_H
-#include "config.h"
-#endif
-
 #include "dnsserver.h"
 #include "record.h"
+#include "utils.h"
 
 #include <cassert>
 #include <cinttypes>
@@ -20,7 +17,6 @@ namespace hash
         uint32_t hash_1(const char *);
         uint32_t hash_2(const char *);
     }  // namespace hash_fn
-
 
     class hashtable;
 

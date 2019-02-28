@@ -1,5 +1,6 @@
 
 #include "dns.h"
+#include "utils.h"
 
 #include <algorithm>
 #include <cassert>

@@ -1,4 +1,5 @@
 
+#include "utils.h"
 #include "dnsserver.h"
 #include "test.h"
 
