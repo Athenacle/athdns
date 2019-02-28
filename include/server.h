@@ -128,8 +128,9 @@ public:
         sending->lock = lock;
         sending->handle = udp;
         sending->obj = obj;
-        pthread_spin_lock(lock);
+
         async_send->data = sending;
+        pthread_spin_lock(lock);
         uv_async_send(async_send);
     }
 

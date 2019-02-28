@@ -138,6 +138,7 @@ void global_server::cleanup()
             if (itor->second->get_response_send()) {
                 itor = ns.sending.erase(itor);
                 c++;
+                DEBUG("cleaning");
             }
         }
         pthread_spin_unlock(ns.sending_lock);
