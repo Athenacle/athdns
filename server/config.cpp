@@ -22,6 +22,8 @@ using namespace utils;
 
 namespace
 {
+    const CH log_level_prefix[][8] = {"", "ERROR", "WARNING", "INFO", "TRACE"};
+
     [[noreturn]] void usage()
     {
         std::cerr << "Usage: " PROJECT_NAME << " <config file>.";
@@ -143,7 +145,7 @@ void config_set_log_level(int ll)
         default:
             assert(false);
     }
-    DEBUG("set log level to {0}", utils::log_level_prefix[level]);
+    DEBUG("set log level to {0}", log_level_prefix[level]);
     global_server::get_server().set_server_log_level(level);
 }
 

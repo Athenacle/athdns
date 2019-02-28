@@ -15,6 +15,10 @@ using namespace dns;
 
 global_server* global_server::server_instance = nullptr;
 
+// response
+response::response(const request_pointer& p) : req(p) {}
+
+response::~response() {}
 
 // request
 request::request(const uv_buf_t* buffer, ssize_t size, const sockaddr* addr) : nsize(size)
@@ -34,8 +38,8 @@ request::~request()
 // forward response
 forward_response::~forward_response()
 {
-    utils::free_buffer(buf->base);
-    delete buf;
+    utils::free_buffer(response_buffer->base);
+    delete response_buffer;
 }
 
 // forward_item
@@ -43,7 +47,7 @@ forward_response::~forward_response()
 forward_item::forward_item(DnsPacket* packet, const request_pointer& rp) : req(rp), pack(packet)
 {
     response_send = false;
-    original_query_id = *reinterpret_cast<uint16_t*>(rp->buf->base);
+    origin_id = *reinterpret_cast<uint16_t*>(rp->buf->base);
     pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE);
 }
 
@@ -102,29 +106,34 @@ bool remote_nameserver::operator==(uint32_t ipaddr)
     return ip == ipaddr;
 }
 
-// delete_item
-delete_item::delete_item(DnsPacket* package, const request_pointer& rp) : req(rp), pack(package) {}
 
-delete_item::~delete_item()
+void remote_nameserver::start_remote()
 {
-    delete pack;
-    delete buf;
+    run.init();
+    run.set_data(this);
+    pthread_create(&run.thread,
+                   nullptr,
+                   [](void* param) -> void* {
+                       auto pointer = reinterpret_cast<uv_udp_nameserver_runnable*>(param);
+                       pointer->start();
+                       return nullptr;
+                   },
+                   &run);
 }
 
-// found_reponse_item
 
-found_response_item::found_response_item(DnsPacket* pack, request* rq) : packet(pack), req(rq)
+found_response::found_response(DnsPacket* pack, const request_pointer& rq)
+    : response(rq), packet(pack)
 {
-    buf = new uv_buf_t;
-    buf->base = reinterpret_cast<char*>(pack->get_data());
-    buf->len = pack->get_size();
+    response_buffer = new uv_buf_t;
+    response_buffer->base = reinterpret_cast<char*>(pack->get_data());
+    response_buffer->len = pack->get_size();
 }
 
-found_response_item::~found_response_item()
+found_response::~found_response()
 {
-    delete buf;
     delete packet;
-    delete req;
+    delete response_buffer;
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -138,14 +147,12 @@ void global_server::cleanup()
             if (itor->second->get_response_send()) {
                 itor = ns.sending.erase(itor);
                 c++;
-                DEBUG("cleaning");
             }
         }
         pthread_spin_unlock(ns.sending_lock);
     }
     DEBUG("cleaned up {0} item", c);
 }
-
 
 void global_server::add_remote_address(uint32_t ip)
 {
@@ -191,7 +198,7 @@ void global_server::init_server_loop()
     status = uv_timer_init(uv_main_loop, &cleanup_timer);
     check(status, "timer cleaner init");
 
-    status = uv_udp_init(uv_main_loop, &server_socket);
+    status = uv_udp_init(uv_main_loop, &server_udp);
 
     check(status, "uv init");
 
@@ -200,19 +207,45 @@ void global_server::init_server_loop()
 
     status = uv_ip4_addr(default_address, default_port, &addr);
     check(status, "uv set ipv4 addr");
-    status =
-        uv_udp_bind(&server_socket, reinterpret_cast<struct sockaddr*>(&addr), UV_UDP_REUSEADDR);
+
+    status = uv_udp_bind(&server_udp, reinterpret_cast<struct sockaddr*>(&addr), UV_UDP_REUSEADDR);
     check(status, "bind");
 
     if (likely(status == 0)) {
         INFO("bind success on {0}:{1}", default_address, default_port);
     }
 
-    status = uv_async_init(uv_main_loop, async_works, uvcb_async_stop_loop);
+    status = uv_async_init(uv_main_loop, async_works, [](uv_async_t* work) {
+        auto server = reinterpret_cast<global_server*>(work->data);
+        uv_timer_stop(&server->cleanup_timer);
+        uv_udp_recv_stop(&server->server_udp);
+        uv_timer_stop(&server->timer);
+        uv_stop(server->uv_main_loop);
+    });
 
-    status = uv_async_init(uv_main_loop, sending_works, uvcb_async_response_send);
+    status = uv_async_init(uv_main_loop, sending_response_works, [](uv_async_t*) {
+        auto& queue = global_server::get_server().response_sending_queue;
+        auto lock = global_server::get_server().response_sending_queue_lock;
 
-    status = uv_async_init(uv_main_loop, sending_response_works, uvcb_async_remote_response_send);
+        pthread_mutex_lock(lock);
+        while (queue.size() > 0) {
+            auto item = queue.front();
+            queue.pop();
+            auto send = new uv_udp_send_t;
+            send->data = item;
+            uv_udp_send(send,
+                        &global_server::get_server().server_udp,
+                        item->get_buffer(),
+                        1,
+                        item->get_sock(),
+                        [](uv_udp_send_t* send, int) {
+                            auto item = reinterpret_cast<found_response*>(send->data);
+                            delete item;
+                            delete send;
+                        });
+        }
+        pthread_mutex_unlock(lock);
+    });
 }
 
 void global_server::set_static_ip(const string& domain, uint32_t ip)
@@ -254,9 +287,31 @@ void global_server::init_server()
         }
     }
     int reportt = timer_timeout * 1000;
-    uv_timer_start(&timer, uvcb_timer_reporter, reportt, reportt);
+    uv_timer_start(&timer,
+                   [](uv_timer_t*) {
+                       static auto& server = global_server::get_server();
+                       int forward = server.get_total_forward_cound();
+                       int total = server.get_total_request();
+                       auto hit = total - forward;
+                       double percent = 0;
+                       if (likely(total != 0)) {
+                           percent = (hit * 1.0) / total * 100;
+                       }
+
+                       INFO(
+                           "report: requests {0}, hit {1}, rate {2:.2f}% "
+                           "forward {3}, saved {4}, memory {5} KB ",
+                           total,
+                           total - forward,
+                           percent,
+                           forward,
+                           server.get_hashtable_size(),
+                           utils::read_rss());
+                   },
+                   reportt,
+                   reportt);
     uv_timer_start(&cleanup_timer, uvcb_timer_cleaner, 10 * 1000, 10 * 1000);
-    uv_udp_recv_start(&server_socket, uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
+    uv_udp_recv_start(&server_udp, uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
 }
 
 global_server::~global_server()
@@ -279,8 +334,36 @@ global_server::~global_server()
 
     delete response_sending_queue_lock;
     delete async_works;
-    delete sending_works;
     delete sending_response_works;
+}
+
+global_server::global_server()
+    : forward_id(utils::rand_value() & 0xffff),
+      server_udp(),
+      queue_lock(),
+      queue_sem(),
+      sending_lock(PTHREAD_MUTEX_INITIALIZER)
+{
+    response_sending_queue_lock = new pthread_mutex_t;
+    total_request_count = 0;
+    total_request_forward_count = 0;
+    timeout_requery = false;
+    parallel_query = false;
+    default_ttl = 256;
+    cache_count = 3000;
+    log_file = "";
+    uv_main_loop = nullptr;
+    static_address = nullptr;
+    timer_timeout = 5;
+    forward_type = FT_ALL;
+    pthread_spin_init(&queue_lock, PTHREAD_PROCESS_PRIVATE);
+    pthread_spin_init(&forward_table_lock, PTHREAD_PROCESS_PRIVATE);
+    pthread_mutex_init(response_sending_queue_lock, nullptr);
+    sem_init(&queue_sem, 0, 0);
+    table = nullptr;
+    async_works = new uv_async_t;
+    async_works->data = this;
+    sending_response_works = new uv_async_t;
 }
 
 void global_server::do_stop()
@@ -332,21 +415,14 @@ void global_server::forward_item_submit(forward_item* item)
     }
 }
 
-void global_server::send_response(found_response_item* item)
+void global_server::send_response(response* resp)
 {
     pthread_mutex_lock(response_sending_queue_lock);
-    response_sending_queue.emplace(item);
-    pthread_mutex_unlock(response_sending_queue_lock);
-    uv_async_send(sending_works);
-}
-
-void global_server::send_response(forward_response* resp)
-{
-    pthread_mutex_lock(response_sending_queue_lock);
-    forward_response_queue.emplace(resp);
+    response_sending_queue.emplace(resp);
     pthread_mutex_unlock(response_sending_queue_lock);
     uv_async_send(sending_response_works);
 }
+
 
 void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
 {
@@ -359,6 +435,7 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
         ns->sending.erase(forward_id);
     }
     pthread_spin_unlock(ns->sending_lock);
+
     pthread_spin_lock(&forward_table_lock);
     auto req = forward_table.find(forward_id);
     if (req == forward_table.end()) {
@@ -369,9 +446,9 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
         forward_item_pointer pointer = req->second;
         forward_table.erase(req);
         pthread_spin_unlock(&forward_table_lock);
-        *p = pointer->original_query_id;
         forward_response* resp = new forward_response(pointer, buf);
         send_response(resp);
+        resp->pointer->set_response_send();
     }
 }
 
@@ -398,8 +475,8 @@ void uvcb_incoming_request_worker(uv_work_t* work)
     } else {
         auto id = pack->getQueryID();
         record_node* found = table.get(name);
+        request_pointer pointer(req);
         if (found == nullptr) {
-            request_pointer pointer(req);
             DDEBUG("Input DNS Request:  ID #{0:x} -> {1}. NOT Found", id, name);
             forward_item* fitem = new forward_item(pack, pointer);
             server.forward_item_submit(fitem);
@@ -408,29 +485,11 @@ void uvcb_incoming_request_worker(uv_work_t* work)
             found->to_string(text);
             DEBUG("Input DNS Request:  ID #{0:x} -> {1} : {2}", id, name, text);
             DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
-            found_response_item* fitem = new found_response_item(ret, req);
+            found_response* fitem = new found_response(ret, pointer);
             server.send_response(fitem);
             delete pack;
         }
     }
-}
-
-
-void uvcb_incoming_request_worker_complete(uv_work_t* work, int)
-{
-    if (work->data == nullptr) {
-        global_server::get_server().do_stop();
-    }
-    delete work;
-}
-
-void uvcb_async_stop_loop(uv_async_t* work)
-{
-    auto server = reinterpret_cast<global_server*>(work->data);
-    uv_timer_stop(&server->cleanup_timer);
-    uv_udp_recv_stop(&server->server_socket);
-    uv_timer_stop(&server->timer);
-    uv_stop(server->uv_main_loop);
 }
 
 void uvcb_remote_recv(
@@ -449,77 +508,6 @@ void uvcb_remote_recv(
         nbuf->len = nread;
         global_server::get_server().response_from_remote(nbuf, ns);
     }
-}
-
-void* remote_nameserver_thread(void* run)
-{
-    auto pointer = reinterpret_cast<uv_udp_nameserver_runnable*>(run);
-    pointer->start();
-    return nullptr;
-}
-
-void uvcb_async_remote_stop_loop(uv_async_t* work)
-{
-    auto pointer = reinterpret_cast<uv_udp_nameserver_runnable*>(work->data);
-    uv_udp_recv_stop(pointer->udp);
-    uv_stop(pointer->loop);
-}
-
-void uvcb_async_response_send(uv_async_t*)
-{
-    auto queue = global_server::get_server().response_sending_queue;
-    auto lock = global_server::get_server().response_sending_queue_lock;
-    pthread_mutex_lock(lock);
-    while (queue.size() > 0) {
-        auto item = queue.front();
-        queue.pop();
-        auto send = new uv_udp_send_t;
-        send->data = item;
-        uv_udp_send(send,
-                    &global_server::get_server().server_socket,
-                    item->get_buffer(),
-                    1,
-                    item->get_sock(),
-                    uvcb_response_send_complete);
-    }
-
-    pthread_mutex_unlock(lock);
-}
-
-void uvcb_response_send_complete(uv_udp_send_t* send, int)
-{
-    auto item = reinterpret_cast<found_response_item*>(send->data);
-    delete item;
-    delete send;
-}
-
-void uvcb_async_remote_response_send(uv_async_t*)
-{
-    auto lock = global_server::get_server().response_sending_queue_lock;
-    auto& queue = global_server::get_server().forward_response_queue;
-
-    pthread_mutex_lock(lock);
-    while (queue.size() > 0) {
-        auto item = queue.front();
-        queue.pop();
-        auto send = new uv_udp_send_t;
-        item->pointer->lock();
-        item->pointer->response_send = true;
-        item->pointer->unlock();
-        uv_udp_send(send,
-                    global_server::get_server().get_server_socket(),
-                    item->buf,
-                    1,
-                    item->pointer->req->sock,
-                    uvcb_remote_response_send_complete);
-    }
-    pthread_mutex_unlock(lock);
-}
-
-void uvcb_remote_response_send_complete(uv_udp_send_t* send, int)
-{
-    //auto item = reinterpret_cast<forward_response*>(send->data);
-    delete send;
 }
 
 void uvcb_remote_nameserver_send_complete(uv_udp_send_t* send, int flag)

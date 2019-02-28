@@ -184,4 +184,39 @@ namespace utils
         return false;
     }
 
+    long read_rss()
+    {
+        static auto page_size = sysconf(_SC_PAGESIZE) / 1024;
+
+        static char buffer[1024];
+        long rss = 0xffffffff;
+        int fd = open("/proc/self/stat", O_RDONLY);
+        if (unlikely(fd == -1)) {
+            return 0;
+        }
+        auto r = read(fd, buffer, 1024);
+        close(fd);
+        if (likely(r != -1)) {
+            char *p = buffer;
+            int empty = 0;
+            for (; p < buffer + r; p++) {
+                if (*p == '(' && *p != 0) {
+                    while (*p != ')') {
+                        p++;
+                    }
+                }
+                if (*p == 0) {
+                    return 0;
+                } else if (*p == ' ') {
+                    empty++;
+                }
+                if (empty == 23)
+                    break;
+            }
+            sscanf(++p, "%ld", &rss);
+        }
+        return rss * page_size;
+    }
+
+
 }  // namespace utils

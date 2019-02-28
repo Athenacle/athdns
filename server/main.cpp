@@ -1,6 +1,6 @@
 
-#include "dns.h"
 #include "dnsserver.h"
+#include "logging.h"
 #include "server.h"
 
 
@@ -17,7 +17,6 @@ void uvcb_server_incoming_alloc(uv_handle_t*, size_t, uv_buf_t* buf)
 void uvcb_server_incoming_recv(
     uv_udp_t*, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr, unsigned int flag)
 {
-    static auto& server = global_server::get_server();
     static auto loop = global_server::get_server().get_main_loop();
 
     if (unlikely((flag & UV_UDP_PARTIAL) == UV_UDP_PARTIAL)) {
@@ -49,24 +48,12 @@ void uvcb_server_incoming_recv(
     uv_work_t* work = new uv_work_t;
     work->data = req;
 
-    uv_queue_work(loop, work, uvcb_incoming_request_worker, uvcb_incoming_request_worker_complete);
-}
-
-void uvcb_timer_reporter(uv_timer_t*)
-{
-    static auto& server = global_server::get_server();
-    int forward = server.get_total_forward_cound();
-    int total = server.get_total_request();
-    auto hit = total - forward;
-    INFO(
-        "Report: Incoming Request {0}, hashtable hit {1}, missing rate {2} forward count {3}, "
-        "hashtable saved {4}, memory usage {5} kB ",
-        total,
-        total - forward,
-        (hit * 1.0) / total,
-        forward,
-        server.get_hashtable_size(),
-        0);
+    uv_queue_work(loop, work, uvcb_incoming_request_worker, [](uv_work_t* work, int) {
+        if (unlikely(work->data == nullptr)) {
+            global_server::get_server().do_stop();
+        }
+        delete work;
+    });
 }
 
 int main(int argc, CH* const argv[])

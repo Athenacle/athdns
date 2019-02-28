@@ -216,6 +216,9 @@ namespace utils
             delete[] old_buffer;
         }
     };
+
+    long read_rss();
+
 }  // namespace utils
 
 

@@ -53,8 +53,6 @@ const int default_dns_port = 53;
 
 const size_t recv_buffer_size = 512;
 
-void uvcb_timer_reporter(uv_timer_t *);
-
 void uvcb_server_incoming_alloc(uv_handle_t *, size_t, uv_buf_t *);
 
 void uvcb_server_incoming_recv(
@@ -79,7 +77,6 @@ namespace utils
 
     void config_system(int, CH *const[]);
 
-    const CH log_level_prefix[][8] = {"", "ERROR", "WARNING", "INFO", "TRACE"};
 
     enum log_level {
         LL_OTHERS = 0,
