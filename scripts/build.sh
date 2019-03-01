@@ -1,7 +1,5 @@
 #!/bin/sh
 
-set -euo pipefail
-
 mkdir -p build && cd build
 
 cmake .. -DCMAKE_BUILD_TYPE=Debug -DATHDNS_ENABLE_TESTING=ON -DATHDNS_ENABLE_CODE_COVERAGE=ON
