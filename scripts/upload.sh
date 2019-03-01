@@ -3,6 +3,8 @@
 
 cur=$(pwd)/build
 
+cd "$cur" || exit -1
+
 lcov --remove dnstest_coverage.info '"$cur"/*' '/usr/*' --output-file coverage.info
 
 lcov --list coverage.info
