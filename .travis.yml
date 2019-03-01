@@ -10,9 +10,9 @@ script:
   - mkdir build
   - cd build
   - cmake .. -DCMAKE_BUILD_TYPE=Debug -DATHDNS_ENABLE_TESTING=ON
-  - make
+  - make VERBOSE=1
 after_success:
-  - bin/dnstest
+  - tests/dnstest
 branches:
   only:
     - master
