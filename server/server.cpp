@@ -1,3 +1,4 @@
+
 #include "server.h"
 #include "dns.h"
 #include "dnsserver.h"
@@ -171,7 +172,7 @@ void global_server::add_remote_address(uint32_t ip)
 void global_server::set_log_file(const CH* path)
 {
     log_file = path;
-    int fd = open(path, O_WRONLY | O_APPEND | O_CREAT);
+    int fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0644);
     if (fd == -1) {
         ERROR("Open log file {0} failed: {1}", path, strerror(errno));
         return;
@@ -444,11 +445,11 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
         delete buf;
     } else {
         forward_item_pointer pointer = req->second;
+        pointer->set_response_send();
         forward_table.erase(req);
         pthread_spin_unlock(&forward_table_lock);
         forward_response* resp = new forward_response(pointer, buf);
         send_response(resp);
-        resp->pointer->set_response_send();
     }
 }
 
