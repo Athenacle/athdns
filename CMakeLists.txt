@@ -33,6 +33,16 @@ include(FindLibuv)
 include(FindJemalloc)
 include(TestBigEndian)
 
+add_library(coverage_config INTERFACE)
+
+option(ATHDNS_ENABLE_CODE_COVERAGE "Enable coverage reporting" OFF)
+
+if(${ATHDNS_ENABLE_CODE_COVERAGE})
+  message(STATUS "Enable Code Coverage")
+  include(CodeCoverage)
+  append_coverage_compiler_flags()
+endif()
+
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
   add_definitions(-Wno-undef)
   add_definitions(-Wno-unused-macros)

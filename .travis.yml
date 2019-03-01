@@ -3,21 +3,16 @@ sudo: required
 language: cpp
 compiler:
   - gcc
-before_install:
-  - sudo apt update
-  - sudo apt install -y libuv1-dev bison flex 
+addons:
+  apt:
+    update: true
+    packages: libuv1-dev bison flex lcov
 script: 
-  - mkdir build
-  - cd build
-  - cmake .. -DCMAKE_BUILD_TYPE=Debug -DATHDNS_ENABLE_TESTING=ON
-  - make VERBOSE=1
+  - scripts/build.sh
 after_success:
-  - tests/dnstest
+  - scripts/upload.sh
 branches:
   only:
     - master
 notifications:
   email: false
-addons:
-  apt:
-    update: true

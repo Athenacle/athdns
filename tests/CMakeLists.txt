@@ -1,6 +1,15 @@
 
 include(Gtest)
 
+include(CodeCoverage)
+
+append_coverage_compiler_flags()
+
+setup_target_for_coverage_lcov(
+  NAME dnstest_coverage
+  EXECUTABLE dnstest
+  DEPENDENCIES dnstest)
+
 include_directories(${CMAKE_SOURCE_DIR}/test)
 
 if(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
@@ -22,3 +31,4 @@ add_executable(dnstest
 add_dependencies(dnstest gtest)
 
 target_link_libraries(dnstest libgtest ${ATHDNS_LIBS})
+
