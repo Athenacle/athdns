@@ -9,12 +9,10 @@ before_install:
 script: 
   - mkdir build
   - cd build
-  - cmake ..
-  - make spdlog
-  - make gtest
+  - cmake .. -DCMAKE_BUILD_TYPE=Debug -DATHDNS_ENABLE_TESTING=ON
   - make
 after_success:
-  - ./dnstest
+  - bin/dnstest
 branches:
   only:
     - master

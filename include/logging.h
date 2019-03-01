@@ -22,9 +22,12 @@
 #define TRACE logging::trace
 
 #ifndef NDEBUG
-#define DDEBUG(format, ...) logging::debug(format, __VA_ARGS__)
+#define DTRACE(format, ...) logging::debug_trace(format, __VA_ARGS__)
+#define DDEBUG(format, ...) logging::debug_trace(format, __VA_ARGS__)
 #else
-#define DDEBUG(format, ...) ;
+#define DDEBUG(format, ...)
+#define DTRACE(format, ...)
+
 #endif
 
 void* logging_thread(void*);
@@ -33,7 +36,18 @@ namespace logging
 {
     using utils::log_level;
 
-    enum class level { none = 0, fatal = 1, error = 2, warn = 3, info = 4, debug = 5, trace = 6 };
+    enum class level {
+        none = 0,
+#ifndef NDEBUG
+        debug_trace = 1,
+#endif
+        fatal = 2,
+        error = 3,
+        warn = 4,
+        info = 5,
+        debug = 6,
+        trace = 7
+    };
 
     void set_default_level(log_level);
 
@@ -136,6 +150,10 @@ namespace logging
     LOGGING_FUNCTION(debug)
 
     LOGGING_FUNCTION(trace)
+
+#ifndef NDEBUG
+    LOGGING_FUNCTION(debug_trace)
+#endif
 
 #undef LOGGING_FUNCTION
 

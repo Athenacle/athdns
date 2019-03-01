@@ -27,6 +27,10 @@ namespace
             LEVEL_STRING(info)
             LEVEL_STRING(debug)
             LEVEL_STRING(trace)
+#ifndef NDEBUG
+            case level::debug_trace:
+                return "dtrac";
+#endif
         }
         return "";
     }
@@ -45,6 +49,9 @@ namespace
             LEVEL_COLOR(info, "\e[32m")
             LEVEL_COLOR(debug, "\e[36m")
             LEVEL_COLOR(trace, "\e[34m")
+#ifndef NDEBUG
+            LEVEL_COLOR(debug_trace, "\e[96m")
+#endif
         }
         return "";
     }
@@ -67,26 +74,25 @@ namespace logging
 
     void set_default_level(log_level ll)
     {
-        auto level = level::debug;
+        auto level = ::logging::level::debug;
         switch (ll) {
             case utils::LL_TRACE:
-                level = level::debug;
+                level = ::logging::level::debug;
                 break;
             case utils::LL_ERROR:
-                level = level::error;
+                level = ::logging::level::error;
                 break;
             case utils::LL_WARNING:
-                level = level::warn;
+                level = ::logging::level::warn;
                 break;
             case utils::LL_INFO:
-                level = level::info;
+                level = ::logging::level::info;
                 break;
             case utils::LL_OFF:
-                level = level::none;
+                level = ::logging::level::none;
                 break;
-
             default:
-                level = level::info;
+                level = ::logging::level::info;
                 break;
         }
         logger::get_logger().set_level(level);
