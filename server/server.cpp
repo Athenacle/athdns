@@ -144,10 +144,13 @@ void global_server::cleanup()
     int c = 0;
     for (auto& ns : remote_address) {
         pthread_spin_lock(ns.sending_lock);
-        for (auto itor = ns.sending.begin(); itor != ns.sending.end(); ++itor) {
+        const auto& end = ns.sending.end();
+        for (auto itor = ns.sending.begin(); itor != end;) {
             if (itor->second->get_response_send()) {
                 itor = ns.sending.erase(itor);
                 c++;
+            } else {
+                ++itor;
             }
         }
         pthread_spin_unlock(ns.sending_lock);
