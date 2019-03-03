@@ -1,4 +1,3 @@
-
 #include "server.h"
 #include "dns.h"
 #include "dnsserver.h"
@@ -15,6 +14,80 @@ using namespace hash;
 using namespace dns;
 
 global_server* global_server::server_instance = nullptr;
+
+void uv_udp_nameserver_runnable::swap(uv_udp_nameserver_runnable& ns)
+{
+    std::swap(loop, ns.loop);
+    std::swap(udp, ns.udp);
+    std::swap(async, ns.async);
+}
+
+void uv_udp_nameserver_runnable::start(uv_run_mode mode)
+{
+    uv_udp_recv_start(udp, uvcb_server_incoming_alloc, uvcb_remote_recv);
+    uv_run(loop, mode);
+}
+
+void uv_udp_nameserver_runnable::stop()
+{
+    uv_async_send(async);
+    pthread_join(thread, nullptr);
+}
+
+void uv_udp_nameserver_runnable::send(send_object* obj)
+{
+    count++;
+    uv_udp_sending* sending = new uv_udp_sending;
+    sending->lock = lock;
+    sending->handle = udp;
+    sending->obj = obj;
+
+    pthread_mutex_lock(lock);
+    sending_queue.emplace(sending);
+    pthread_mutex_unlock(lock);
+
+    uv_async_send(async_send);
+}
+
+void uv_udp_nameserver_runnable::destroy()
+{
+    pthread_mutex_destroy(lock);
+    uv_loop_close(loop);
+    delete loop;
+    delete async_send;
+    delete lock;
+    delete udp;
+    delete async;
+}
+
+void uv_udp_nameserver_runnable::init()
+{
+    lock = new pthread_mutex_t;
+    async = new uv_async_t;
+    udp = new uv_udp_t;
+    loop = new uv_loop_t;
+
+    pthread_mutex_init(lock, nullptr);
+    uv_loop_init(loop);
+
+    pthread_mutex_lock(lock);
+    async_send = new uv_async_t;
+    uv_async_init(loop, async, [](uv_async_t* work) {
+        auto pointer = reinterpret_cast<uv_udp_nameserver_runnable*>(work->data);
+        uv_udp_recv_stop(pointer->udp);
+        uv_walk(pointer->loop, [](uv_handle_t* t, void*) { uv_close(t, nullptr); }, nullptr);
+        uv_stop(pointer->loop);
+    });
+    uv_async_init(loop, async_send, uvcb_async_remote_send);
+    async_send->data = this;
+    async->data = this;
+
+    pthread_mutex_unlock(lock);
+
+    uv_udp_init(loop, udp);
+
+    udp->data = this;
+}
 
 // response
 response::response(const request_pointer& p) : req(p) {}
@@ -59,6 +132,15 @@ forward_item::~forward_item()
 }
 
 // remote nameserver
+void remote_nameserver::send(send_object* obj)
+{
+    run.send(obj);
+}
+void remote_nameserver::to_string(string& str) const
+{
+    ip.to_string(str);
+    str.append(":").append(std::to_string(port));
+}
 
 remote_nameserver::~remote_nameserver()
 {
@@ -225,6 +307,7 @@ void global_server::init_server_loop()
         uv_udp_recv_stop(&server->server_udp);
         uv_timer_stop(&server->timer);
         uv_stop(server->uv_main_loop);
+        uv_walk(server->uv_main_loop, [](uv_handle_t* t, void*) { uv_close(t, nullptr); }, nullptr);
     });
 
     status = uv_async_init(uv_main_loop, sending_response_works, [](uv_async_t*) {
@@ -392,6 +475,13 @@ void global_server::forward_item_all(forward_item_pointer& item)
         obj->bufs = item->req->buf;
         obj->bufs_count = 1;
         obj->sock = reinterpret_cast<sockaddr*>(ns.sock);
+
+#ifdef DTRACE_OUTPUT
+        string ns_string;
+        ns.to_string(ns_string);
+        DTRACE("OUT request {0} -> {1}", item->pack->getQuery().getName(), ns_string);
+#endif
+
         ns.send(obj);
         ns.request_forward_count++;
         pthread_spin_lock(ns.sending_lock);
@@ -433,6 +523,21 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
     uint16_t* p = reinterpret_cast<uint16_t*>(buf->base);
     uint16_t forward_id = *p;
 
+#ifdef DTRACE_OUTPUT
+    DnsPacket* dpack = DnsPacket::fromDataBuffer(buf);
+    string ns_string;
+    ns->to_string(ns_string);
+    string node_string;
+    record_node* node = dpack->generate_record_node();
+    if (node != nullptr) {
+        node->to_string(node_string);
+        DTRACE(
+            "IN response from {0}: {1}->{2}", ns_string, dpack->getQuery().getName(), node_string);
+    }
+    delete node;
+    delete dpack;
+#endif
+
     pthread_spin_lock(ns->sending_lock);
     auto ns_forward_item = ns->sending.find(forward_id);
     if (likely(ns_forward_item != ns->sending.end())) {
@@ -451,8 +556,22 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
         pointer->set_response_send();
         forward_table.erase(req);
         pthread_spin_unlock(&forward_table_lock);
+        DnsPacket* pack = DnsPacket::fromDataBuffer(buf);
+        pack->parse();
+        if (unlikely(pack->getAnswerRRCount() != 0)) {
+            record_node* node = pack->generate_record_node();
+            cache_add_node(node);
+        }
+        delete pack;
         forward_response* resp = new forward_response(pointer, buf);
         send_response(resp);
+    }
+}
+
+void global_server::cache_add_node(record_node* node)
+{
+    if (table != nullptr) {
+        table->put(node);
     }
 }
 
@@ -481,13 +600,13 @@ void uvcb_incoming_request_worker(uv_work_t* work)
         record_node* found = table.get(name);
         request_pointer pointer(req);
         if (found == nullptr) {
-            DDEBUG("Input DNS Request:  ID #{0:x} -> {1}. NOT Found", id, name);
+            DTRACE("IN request:  ID #{0:x} -> {1}. NOT Found", id, name);
             forward_item* fitem = new forward_item(pack, pointer);
             server.forward_item_submit(fitem);
         } else {
             string text;
             found->to_string(text);
-            DEBUG("Input DNS Request:  ID #{0:x} -> {1} : {2}", id, name, text);
+            DTRACE("IN request:  ID #{0:x} -> {1} : {2}", id, name, text);
             DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
             found_response* fitem = new found_response(ret, pointer);
             server.send_response(fitem);

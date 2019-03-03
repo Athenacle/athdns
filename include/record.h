@@ -99,10 +99,6 @@ protected:
 
     void shared_data_fill_offset(uint8_t *, uint16_t) const;
 
-    // uint8_t *shared_data_build(uint8_t *, size_t, size_t, int &) const;
-
-    // uint8_t *shared_data_build(uint8_t *, size_t, uint16_t &) const;
-
     virtual const uint8_t *get_value() const = 0;
 
 public:
@@ -162,7 +158,7 @@ public:
     record_node_A(domain_name, ip_address &);
     record_node_A(domain_name, uint32_t);
 
-    ~record_node_A();
+    virtual ~record_node_A();
 
     bool operator==(const record_node_A &) const;
     bool operator==(const ip_address &) const;
@@ -186,8 +182,6 @@ public:
 
     virtual void to_string(string &) const override;
     domain_name get_actual_name() const;
-
-    //virtual int to_data(uint8_t *buffer, size_t buf_size, int answer_offset) const override;
 };
 
 #endif

@@ -95,6 +95,11 @@ namespace dns
     }  // namespace dns_utils
 
 
+    DnsPacket* DnsPacket::fromDataBuffer(uv_buf_t* buf)
+    {
+        return fromDataBuffer(reinterpret_cast<uint8_t*>(buf->base), buf->len);
+    }
+
     DnsPacket* DnsPacket::fromDataBuffer(uint8_t* _data, uint32_t _size)
     {
         auto buf = new uint8_t[_size];
@@ -257,7 +262,7 @@ namespace dns
                     new_node = new record_node_CNAME(_data, begin, name);
                     break;
                 default:
-                    assert(false);
+                    new_node = nullptr;
             }
 
             begin = next_pointer;
@@ -267,7 +272,7 @@ namespace dns
                 node->set_tail(new_node);
             }
             if (begin >= _data + _size
-                || answer_count > getAnswerRRCount() + getAuthorityRRCount()) {
+                || answer_count >= getAnswerRRCount() + getAuthorityRRCount()) {
                 break;
             }
         }

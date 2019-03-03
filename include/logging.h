@@ -22,9 +22,11 @@
 #define TRACE logging::trace
 
 #ifndef NDEBUG
+#define DTRACE_OUTPUT
 #define DTRACE(format, ...) logging::debug_trace(format, __VA_ARGS__)
 #define DDEBUG(format, ...) logging::debug_trace(format, __VA_ARGS__)
 #else
+#undef DTRACE_OUTPUT
 #define DDEBUG(format, ...)
 #define DTRACE(format, ...)
 
@@ -99,6 +101,7 @@ namespace logging
         ~logger();
 
         static logger* instance;
+        static pthread_spinlock_t* instance_lock;
 
     public:
         level get_log_level() const
@@ -129,14 +132,16 @@ namespace logging
         return logger::get_logger().get_log_level();
     }
 
-#define LOGGING_FUNCTION(__level)                                      \
-    template <class... Args>                                           \
-    void __level(const char* __fmt, const Args&... __args)             \
-    {                                                                  \
-        if (level::__level <= logger ::get_logger().get_log_level()) { \
-            string msg = fmt::format(__fmt, __args...);                \
-            logger::get_logger().write(level::__level, msg);           \
-        }                                                              \
+#define LOGGING_FUNCTION(__level)                          \
+    template <class... Args>                               \
+    void __level(const char* __fmt, const Args&... __args) \
+    {                                                      \
+        static auto& worker = logger::get_logger();        \
+        static auto lv = worker.get_log_level();           \
+        if (level::__level <= lv) {                        \
+            string msg = fmt::format(__fmt, __args...);    \
+            worker.write(level::__level, msg);             \
+        }                                                  \
     }
 
     LOGGING_FUNCTION(fatal)

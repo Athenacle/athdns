@@ -9,6 +9,9 @@
 
 using namespace logging;
 
+pthread_spinlock_t* logging::logger::instance_lock = nullptr;
+logger* logger::instance = nullptr;
+
 namespace
 {
     const int new_stdout_fileno = 99;
@@ -60,8 +63,6 @@ namespace
 
 }  // namespace
 
-
-logger* logger::instance = nullptr;
 
 namespace logging
 {
@@ -168,6 +169,8 @@ logging_object::logging_object(level lv, const string& message) : msg(message), 
 
 void logger::init_logger()
 {
+    instance_lock = new pthread_spinlock_t;
+    pthread_spin_init(instance_lock, PTHREAD_PROCESS_PRIVATE);
     logger::instance = new logger;
     int stdout = dup2(STDOUT_FILENO, new_stdout_fileno);
     instance->sinks->emplace_back(new_stdout_fileno);
@@ -175,6 +178,8 @@ void logger::init_logger()
 
 void logger::destroy()
 {
+    pthread_spin_destroy(instance_lock);
+    delete instance_lock;
     delete logger::instance;
 }
 
@@ -219,9 +224,14 @@ void logger::start()
 
 logger& logger::get_logger()
 {
-    if (unlikely(instance == nullptr)) {
-        init_logger();
-    }
+    //////////////////////////////////////////
+    // pthread_spin_lock(instance_lock);    //
+    // if (unlikely(instance == nullptr)) { //
+    //     init_logger();                   //
+    // }                                    //
+    // auto& ret = *instance;               //
+    // pthread_spin_unlock(instance_lock);  //
+    //////////////////////////////////////////
     return *instance;
 }
 
@@ -241,7 +251,7 @@ void logger::write(level l, const string& msg)
 
 void* logging_thread(void*)
 {
-    auto& instance = logger::get_logger();
+    static auto& instance = logger::get_logger();
     while (true) {
         sem_wait(instance.sem);
         pthread_spin_lock(instance.queue_lock);

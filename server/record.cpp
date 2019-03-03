@@ -42,8 +42,9 @@ void record_node::operator delete(void *p)
 record_node::~record_node()
 {
     auto next = node_next;
-    if (name != nullptr)
+    if (unlikely(name != nullptr)) {
         utils::strfree(name);
+    }
     if (unlikely(next != nullptr)) {
         delete next;
     }

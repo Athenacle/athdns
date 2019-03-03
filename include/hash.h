@@ -68,7 +68,7 @@ namespace hash
         };
 
         struct unordered_map_equal {
-            bool operator()(const domain_name lhs, const domain_name &rhs) const
+            bool operator()(const domain_name &lhs, const domain_name &rhs) const
             {
                 return utils::strcmp(lhs, rhs) == 0;
             }
@@ -94,7 +94,7 @@ namespace hash
         using size_type = size_t;
 
     private:
-        container_pointer container;
+        container_type container;
         lock_pointer locks;
         lock_pointer lru_lock;
 
@@ -103,26 +103,12 @@ namespace hash
 
         size_type total_size;
         size_type hash_size;
-        size_type saved;
 
+        utils::atomic_number<size_type> saved;
+
+        mutable pthread_mutex_t mutex;
 
     private:
-        container_reference get_container(domain_name name) const
-        {
-            auto hc_1 = hash::hash_fn::hash_1(name);
-            auto offset = hc_1 % hash_size;
-            return container[offset];
-        }
-
-        container_reference get_container(domain_name name, size_type &off) const
-        {
-            auto hc_1 = hash::hash_fn::hash_1(name);
-            auto offset = hc_1 % hash_size;
-            off = offset;
-            return container[offset];
-        }
-
-        alloc::allocator<container_type> alloc;
         alloc::allocator<lock_type> lock_alloc;
 
     public:

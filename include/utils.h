@@ -77,7 +77,7 @@ namespace utils
     {
     private:
         T value;
-        pthread_spinlock_t lock;
+        mutable pthread_spinlock_t lock;
 
     public:
         ~atomic_number() {}
@@ -88,7 +88,7 @@ namespace utils
             value = v;
         }
 
-        T get()
+        T get() const
         {
             pthread_spin_lock(&lock);
             auto ret = value;
@@ -104,7 +104,7 @@ namespace utils
             return v;
         }
 
-        operator T()
+        operator T() const
         {
             return get();
         }

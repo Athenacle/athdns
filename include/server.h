@@ -34,7 +34,6 @@ void uvcb_async_remote_send(uv_async_t *);
 
 void uvcb_timer_cleaner(uv_timer_t *);
 
-
 struct send_object {
     const sockaddr *sock;
     uv_buf_t *bufs;
@@ -66,85 +65,22 @@ public:
         udp->data = p;
     }
 
-    void swap(uv_udp_nameserver_runnable &ns)
-    {
-        std::swap(loop, ns.loop);
-        std::swap(udp, ns.udp);
-        std::swap(async, ns.async);
-    }
+    void swap(uv_udp_nameserver_runnable &ns);
 
-    void init()
-    {
-        lock = new pthread_mutex_t;
-        async = new uv_async_t;
-        udp = new uv_udp_t;
-        loop = new uv_loop_t;
+    void init();
 
-        pthread_mutex_init(lock, nullptr);
-        uv_loop_init(loop);
+    void start(uv_run_mode mode = UV_RUN_DEFAULT);
 
-        pthread_mutex_lock(lock);
-        async_send = new uv_async_t;
-        uv_async_init(loop, async, [](uv_async_t *work) {
-            auto pointer = reinterpret_cast<uv_udp_nameserver_runnable *>(work->data);
-            uv_udp_recv_stop(pointer->udp);
-            uv_stop(pointer->loop);
-        });
-
-        uv_async_init(loop, async_send, uvcb_async_remote_send);
-        async_send->data = this;
-        async->data = this;
-
-        pthread_mutex_unlock(lock);
-
-        uv_udp_init(loop, udp);
-
-        udp->data = this;
-    }
-
-    void start(uv_run_mode mode = UV_RUN_DEFAULT)
-    {
-        uv_udp_recv_start(udp, uvcb_server_incoming_alloc, uvcb_remote_recv);
-        uv_run(loop, mode);
-    }
-
-    void stop()
-    {
-        uv_async_send(async);
-        pthread_join(thread, nullptr);
-    }
-
-    void send(send_object *obj)
-    {
-        count++;
-        uv_udp_sending *sending = new uv_udp_sending;
-        sending->lock = lock;
-        sending->handle = udp;
-        sending->obj = obj;
-
-        pthread_mutex_lock(lock);
-        sending_queue.emplace(sending);
-        pthread_mutex_unlock(lock);
-
-        uv_async_send(async_send);
-    }
-
-    void destroy()
-    {
-        pthread_mutex_destroy(lock);
-        uv_loop_close(loop);
-        delete loop;
-        delete async_send;
-        delete lock;
-        delete udp;
-        delete async;
-    }
+    void stop();
+    void send(send_object *);
+    void destroy();
 };
 
 struct request {
     uv_buf_t *buf;
     ssize_t nsize;
     const sockaddr *sock;
+    dns::DnsPacket *pack;
 
     request(const uv_buf_t *, ssize_t, const sockaddr *);
     ~request();
@@ -163,6 +99,11 @@ public:
     response(const request_pointer &);
 
     virtual ~response();
+
+    const request_pointer &get_request() const
+    {
+        return req;
+    }
 
     uv_buf_t *get_buffer() const
     {
@@ -277,6 +218,9 @@ struct remote_nameserver {
         index = i;
     }
 
+
+    void to_string(string &) const;
+
     operator const sockaddr *() const
     {
         return reinterpret_cast<const sockaddr *>(sock);
@@ -300,10 +244,8 @@ struct remote_nameserver {
         pthread_join(run.thread, nullptr);
     }
 
-    void send(send_object *obj)
-    {
-        run.send(obj);
-    }
+    void send(send_object *obj);
+
 
 private:
     remote_nameserver(const remote_nameserver &) = delete;
@@ -512,6 +454,8 @@ public:
     void response_from_remote(uv_buf_t *, remote_nameserver *);
 
     void cleanup();
+
+    void cache_add_node(record_node *);
 };
 
 
