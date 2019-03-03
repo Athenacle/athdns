@@ -10,7 +10,7 @@
 
 #include <gtest/gtest.h>
 
-#include "dnsserver.h"
+#include "athdns.h"
 
 namespace test
 {

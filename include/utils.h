@@ -2,7 +2,7 @@
 #ifndef UTILS_H
 #define UTILS_H
 
-#include "dnsserver.h"
+#include "athdns.h"
 
 #include <pthread.h>
 

@@ -1,7 +1,7 @@
 #ifndef HASH_H
 #define HASH_H
 
-#include "dnsserver.h"
+#include "athdns.h"
 #include "record.h"
 #include "utils.h"
 

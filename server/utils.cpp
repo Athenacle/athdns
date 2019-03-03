@@ -1,6 +1,6 @@
 
 #include "utils.h"
-#include "dnsserver.h"
+#include "athdns.h"
 #include "logging.h"
 
 #include <unistd.h>

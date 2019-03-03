@@ -1,6 +1,6 @@
 
+#include "athdns.h"
 #include "config_file.h"
-#include "dnsserver.h"
 #include "logging.h"
 #include "server.h"
 

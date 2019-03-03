@@ -5,8 +5,8 @@
 #define SERVER_H
 
 
+#include "athdns.h"
 #include "dns.h"
-#include "dnsserver.h"
 #include "hash.h"
 
 #include <pthread.h>

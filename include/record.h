@@ -5,7 +5,7 @@
 #define RECORD_H
 
 #include <arpa/inet.h>
-#include "dnsserver.h"
+#include "athdns.h"
 
 using domain_name = const char *;
 

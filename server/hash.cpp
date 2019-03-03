@@ -1,6 +1,6 @@
 
 #include "hash.h"
-#include "dnsserver.h"
+#include "athdns.h"
 #include "logging.h"
 
 #ifndef NDEBUG

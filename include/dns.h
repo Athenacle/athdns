@@ -7,7 +7,7 @@
 #include "config.h"
 #endif
 
-#include "dnsserver.h"
+#include "athdns.h"
 #include "record.h"
 
 #include <cassert>

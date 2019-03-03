@@ -1,5 +1,5 @@
 
-#include "dnsserver.h"
+#include "athdns.h"
 #include "logging.h"
 #include "server.h"
 
