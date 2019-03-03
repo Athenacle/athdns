@@ -1,8 +1,8 @@
 
 #include "athdns.h"
 #include "logging.h"
+#include "objects.h"
 #include "server.h"
-
 
 using namespace dns;
 
@@ -43,7 +43,7 @@ void uvcb_server_incoming_recv(
         return;
     }
 
-    auto req = new request(buf, nread, addr);
+    auto req = new objects::request(buf, nread, addr);
 
     uv_work_t* work = new uv_work_t;
     work->data = req;

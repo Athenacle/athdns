@@ -8,6 +8,7 @@
 #include "athdns.h"
 #include "dns.h"
 #include "hash.h"
+#include "objects.h"
 
 #include <pthread.h>
 #include <semaphore.h>
@@ -34,15 +35,9 @@ void uvcb_async_remote_send(uv_async_t *);
 
 void uvcb_timer_cleaner(uv_timer_t *);
 
-struct send_object {
-    const sockaddr *sock;
-    uv_buf_t *bufs;
-    int bufs_count;
-};
-
 struct uv_udp_sending {
     pthread_mutex_t *lock;
-    send_object *obj;
+    objects::send_object *obj;
     uv_udp_t *handle;
 };
 
@@ -72,116 +67,10 @@ public:
     void start(uv_run_mode mode = UV_RUN_DEFAULT);
 
     void stop();
-    void send(send_object *);
+    void send(objects::send_object *);
     void destroy();
 };
 
-struct request {
-    uv_buf_t *buf;
-    ssize_t nsize;
-    const sockaddr *sock;
-    dns::DnsPacket *pack;
-
-    request(const uv_buf_t *, ssize_t, const sockaddr *);
-    ~request();
-};
-
-using request_pointer = std::shared_ptr<request>;
-
-class response
-{
-    request_pointer req;
-
-protected:
-    uv_buf_t *response_buffer;
-
-public:
-    response(const request_pointer &);
-
-    virtual ~response();
-
-    const request_pointer &get_request() const
-    {
-        return req;
-    }
-
-    uv_buf_t *get_buffer() const
-    {
-        return response_buffer;
-    }
-
-    const sockaddr *get_sock() const
-    {
-        return req->sock;
-    }
-};
-
-class found_response : public response
-{
-    dns::DnsPacket *packet;
-
-public:
-    found_response(dns::DnsPacket *, const request_pointer &);
-
-    virtual ~found_response();
-};
-
-struct forward_item {
-    request_pointer req;
-
-    dns::DnsPacket *pack;
-
-    uint16_t forward_id;
-    uint16_t origin_id;
-    pthread_spinlock_t _lock;
-
-    bool response_send;
-
-    void lock()
-    {
-        pthread_spin_lock(&_lock);
-    }
-
-    void unlock()
-    {
-        pthread_spin_unlock(&_lock);
-    }
-
-
-    void set_response_send()
-    {
-        pthread_spin_lock(&_lock);
-        response_send = true;
-        pthread_spin_unlock(&_lock);
-    }
-
-    bool get_response_send()
-    {
-        pthread_spin_lock(&_lock);
-        auto rs = response_send;
-        pthread_spin_unlock(&_lock);
-        return rs;
-    }
-
-    forward_item(dns::DnsPacket *, const request_pointer &);
-
-    ~forward_item();
-};
-
-using forward_item_pointer = std::shared_ptr<forward_item>;
-
-struct forward_response : public response {
-    forward_item_pointer pointer;
-
-    forward_response(forward_item_pointer &item, uv_buf_t *b) : response(item->req), pointer(item)
-    {
-        uint16_t *p = reinterpret_cast<uint16_t *>(b->base);
-        *p = item->origin_id;
-        response_buffer = b;
-    }
-
-    virtual ~forward_response();
-};
 
 struct remote_nameserver {
     uv_udp_nameserver_runnable run;
@@ -192,7 +81,7 @@ struct remote_nameserver {
     ip_address ip;
 
     pthread_spinlock_t *sending_lock;
-    std::map<uint16_t, forward_item_pointer> sending;
+    std::map<uint16_t, objects::forward_item_pointer> sending;
 
     utils::atomic_int request_forward_count;
     utils::atomic_int response_count;
@@ -217,7 +106,6 @@ struct remote_nameserver {
     {
         index = i;
     }
-
 
     void to_string(string &) const;
 
@@ -244,16 +132,11 @@ struct remote_nameserver {
         pthread_join(run.thread, nullptr);
     }
 
-    void send(send_object *obj);
+    void send(objects::send_object *obj);
 
 
 private:
     remote_nameserver(const remote_nameserver &) = delete;
-};
-
-struct forward_queue_item {
-    forward_item_pointer item;
-    int ns_index;
 };
 
 class global_server
@@ -270,9 +153,9 @@ class global_server
     std::vector<remote_nameserver> remote_address;
     std::vector<static_address_type> *static_address;
 
-    std::unordered_map<uint16_t, forward_item_pointer> forward_table;
+    std::unordered_map<uint16_t, objects::forward_item_pointer> forward_table;
 
-    std::queue<response *> response_sending_queue;
+    std::queue<objects::response *> response_sending_queue;
 
     pthread_mutex_t *response_sending_queue_lock;
 
@@ -321,24 +204,24 @@ class global_server
 
     static global_server *server_instance;
 
-    void forward_item_all(forward_item_pointer &);
+    void forward_item_all(objects::forward_item_pointer &);
 
 public:
-    void send_response(response *);
+    void send_response(objects::response *);
 
     uv_loop_t *get_main_loop()
     {
         return uv_main_loop;
     }
 
-    void forward_item_submit(forward_item *);
+    void forward_item_submit(objects::forward_item *);
 
     uv_udp_t *get_server_udp()
     {
         return &server_udp;
     }
 
-    void send(send_object *);
+    void send(objects::send_object *);
 
     void increase_request()
     {
