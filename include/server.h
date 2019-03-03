@@ -282,6 +282,7 @@ class global_server
 
     utils::atomic_int total_request_count;
     utils::atomic_int total_request_forward_count;
+    utils::atomic_number<time_t> current_time;
 
     int default_ttl;
     int timer_timeout;
@@ -297,6 +298,7 @@ class global_server
     uv_async_t *async_works;
     uv_async_t *sending_response_works;
 
+    uv_timer_t current_time_timer;
     uv_timer_t timer;
     uv_timer_t cleanup_timer;
 
@@ -456,6 +458,11 @@ public:
     void cleanup();
 
     void cache_add_node(record_node *);
+
+    time_t get_time() const
+    {
+        return current_time;
+    }
 };
 
 

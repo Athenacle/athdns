@@ -218,5 +218,12 @@ namespace utils
         return rss * page_size;
     }
 
+    bool check_uv_return_status(int status, const char *when)
+    {
+        if (unlikely(status != 0)) {
+            ERROR("{0} failed: {1}", when, uv_strerror(status));
+        }
+        return status == 0;
+    }
 
 }  // namespace utils

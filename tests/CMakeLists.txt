@@ -30,5 +30,5 @@ add_executable(dnstest
 
 add_dependencies(dnstest gtest)
 
-target_link_libraries(dnstest libgtest ${ATHDNS_LIBS})
+target_link_libraries(dnstest libgtest ${ATHDNS_LIBS} ${LIBUV_LIBRARIES})
 

@@ -268,34 +268,26 @@ void global_server::set_log_file(const CH* path)
 
 void global_server::init_server_loop()
 {
-    const static auto check = [=](int st, const char* when) {
-        if (st < 0) {
-            ERROR("error in libuv when {0}: {1}", when, uv_strerror(st));
-            exit(0);
-        }
-    };
-
     struct sockaddr_in addr;
     uv_main_loop = uv_default_loop();
 
     auto status = uv_timer_init(uv_main_loop, &timer);
-    check(status, "timer report init");
 
     status = uv_timer_init(uv_main_loop, &cleanup_timer);
-    check(status, "timer cleaner init");
+    utils::check_uv_return_status(status, "timer cleaner init");
 
     status = uv_udp_init(uv_main_loop, &server_udp);
 
-    check(status, "uv init");
+    utils::check_uv_return_status(status, "uv init");
 
     const int default_port = 53535;
     const auto default_address = "0.0.0.0";
 
     status = uv_ip4_addr(default_address, default_port, &addr);
-    check(status, "uv set ipv4 addr");
+    utils::check_uv_return_status(status, "uv set ipv4 addr");
 
     status = uv_udp_bind(&server_udp, reinterpret_cast<struct sockaddr*>(&addr), UV_UDP_REUSEADDR);
-    check(status, "bind");
+    utils::check_uv_return_status(status, "bind");
 
     if (likely(status == 0)) {
         INFO("bind success on {0}:{1}", default_address, default_port);
@@ -333,6 +325,8 @@ void global_server::init_server_loop()
         }
         pthread_mutex_unlock(lock);
     });
+
+    uv_timer_init(uv_main_loop, &current_time_timer);
 }
 
 void global_server::set_static_ip(const string& domain, uint32_t ip)
@@ -399,7 +393,21 @@ void global_server::init_server()
                    reportt);
     uv_timer_start(&cleanup_timer, uvcb_timer_cleaner, 10 * 1000, 10 * 1000);
     uv_udp_recv_start(&server_udp, uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
+
+    const auto& timer_func = [](uv_timer_t* p) {
+        static auto ct = reinterpret_cast<utils::atomic_number<time_t>*>(p->data);
+        static utils::atomic_int count(0);
+        if (count++ % 600 == 0) {
+            ct->reset(time(nullptr));
+        } else {
+            ct->operator++();
+        }
+    };
+    current_time_timer.data = &current_time;
+    current_time.reset(time(nullptr));
+    uv_timer_start(&current_time_timer, timer_func, 1000, 1000);
 }
+
 
 global_server::~global_server()
 {

@@ -218,6 +218,7 @@ namespace utils
     };
 
     long read_rss();
+    bool check_uv_return_status(int, const char *);
 
 }  // namespace utils
 
