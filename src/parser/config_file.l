@@ -1,9 +1,3 @@
-%e  1019
-%p  2807
-%n  371
-%k  284
-%a  1213
-%o  1117
 
 DIGIT [0-9]
 IP_PART {DIGIT}{1,3}
@@ -20,6 +14,7 @@ DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
 %option yylineno
 %option caseless
 %option noyywrap
+%option noinput nounput
 
 %%
 
