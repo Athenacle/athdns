@@ -20,13 +20,15 @@ if(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
   add_definitions(-Wno-global-constructors)
 endif()
 
+set(ATHDNS_TEST_DIR ${CMAKE_SOURCE_DIR}/src/test)
+
 add_executable(dnstest
-  ${CMAKE_SOURCE_DIR}/tests/test_dns.cpp
-  ${CMAKE_SOURCE_DIR}/tests/utils.cpp
-  ${CMAKE_SOURCE_DIR}/tests/test_utils.cpp
-  ${CMAKE_SOURCE_DIR}/tests/hash_test.cpp
-  ${CMAKE_SOURCE_DIR}/tests/dns_record.cpp
-  ${CMAKE_SOURCE_DIR}/tests/main.cpp)
+  ${ATHDNS_TEST_DIR}/test_dns.cpp
+  ${ATHDNS_TEST_DIR}/utils.cpp
+  ${ATHDNS_TEST_DIR}/test_utils.cpp
+  ${ATHDNS_TEST_DIR}/hash_test.cpp
+  ${ATHDNS_TEST_DIR}/dns_record.cpp
+  ${ATHDNS_TEST_DIR}/main.cpp)
 
 add_dependencies(dnstest gtest)
 

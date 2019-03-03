@@ -3,7 +3,8 @@ cmake_minimum_required(VERSION 3.4)
 
 project(athdns C CXX)
 
-option(ATHDNS_ENABLE_TEST "Enable Testing" OFF)
+option(ATHDNS_ENABLE_TESTING "Enable Testing" OFF)
+option(ATHDNS_ENABLE_CODE_COVERAGE "Enable coverage reporting" OFF)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
 set(ATHDNS_INCLUDE_ROOT ${CMAKE_SOURCE_DIR}/include/)
@@ -33,11 +34,8 @@ include(FindLibuv)
 include(FindJemalloc)
 include(TestBigEndian)
 
-add_library(coverage_config INTERFACE)
-
-option(ATHDNS_ENABLE_CODE_COVERAGE "Enable coverage reporting" OFF)
-
 if(${ATHDNS_ENABLE_CODE_COVERAGE})
+  add_library(coverage_config INTERFACE)
   message(STATUS "Enable Code Coverage")
   include(CodeCoverage)
   append_coverage_compiler_flags()
@@ -52,10 +50,14 @@ test_big_endian(ON_BIG_ENDIAN)
 
 include_directories(${ATHDNS_INCLUDE_ROOT})
 
-aux_source_directory(dns ATHDNS_DRIVER_LIB_LIST)
-aux_source_directory(server ATHDNS_DRIVER_LIB_LIST)
-
-list(REMOVE_ITEM ATHDNS_DRIVER_LIB_LIST "server/main.cpp")
+set(ATHDNS_LIB_SRC
+  src/config.cpp
+  src/dns.cpp
+  src/hash.cpp
+  src/logging.cpp
+  src/record.cpp
+  src/server.cpp
+  src/utils.cpp)
 
 include(FindFLEX)
 include(FindBISON)
@@ -63,27 +65,34 @@ include(FindBISON)
 find_package(FLEX)
 find_package(BISON)
 
+set(ATHDNS_PARSER_DIR ${CMAKE_SOURCE_DIR}/src/parser)
+set(ATHDNS_PARSER_RESULT_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser)
+
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deps)
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser)
+file(MAKE_DIRECTORY ${ATHDNS_PARSER_RESULT_DIR})
 
-bison_target(ConfigParser ${CMAKE_SOURCE_DIR}/server/config_file.y
-  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/bison_parser.c)
-flex_target(ConfigLexer ${CMAKE_SOURCE_DIR}/server/config_file.l
-  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/flex_lexer.c)
+bison_target(ConfigParser ${ATHDNS_PARSER_DIR}/config_file.y
+  ${ATHDNS_PARSER_RESULT_DIR}/bison_parser.c)
+flex_target(ConfigLexer ${ATHDNS_PARSER_DIR}/config_file.l
+  ${ATHDNS_PARSER_RESULT_DIR}/flex_lexer.c)
 
-include_directories(${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser ${LIBUV_INCLUDE_DIR})
+include_directories(${LIBUV_INCLUDE_DIR})
 
 add_flex_bison_dependency(ConfigLexer ConfigParser)
 
-list(APPEND ATHDNS_LIB_SOURCE_LIST
-  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/flex_lexer.c
-  ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser/bison_parser.c)
+set_source_files_properties(${ATHDNS_PARSER_RESULT_DIR}/flex_lexer.c
+  PROPERTIES COMPILE_FLAGS -I${ATHDNS_PARSER_RESULT_DIR})
+set_source_files_properties(${ATHDNS_PARSER_RESULT_DIR}/bison_parser.c
+  PROPERTIES COMPILE_FLAGS -I${ATHDNS_PARSER_RESULT_DIR})
 
-add_library(utils STATIC ${ATHDNS_LIB_SOURCE_LIST} ${ATHDNS_DRIVER_LIB_LIST})
+add_library(utils STATIC
+  ${ATHDNS_LIB_SRC}
+  ${ATHDNS_PARSER_RESULT_DIR}/flex_lexer.c
+  ${ATHDNS_PARSER_RESULT_DIR}/bison_parser.c)
 
 add_dependencies(utils fmt)
 
-add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/server/main.cpp)
+add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 
 set(ATHDNS_LIBS ${ATHDNS_LIBS} utils)
 
@@ -108,5 +117,5 @@ target_link_libraries(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${ATHDNS_LIBS} pthread)
 
 if (${ATHDNS_ENABLE_TESTING})
   enable_testing()
-  add_subdirectory(${CMAKE_SOURCE_DIR}/tests)
+  add_subdirectory(${CMAKE_SOURCE_DIR}/src/test)
 endif()
