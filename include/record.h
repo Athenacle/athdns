@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
 
-#pragma once
+// record.h: record class used for hashtable header file
 
 #ifndef RECORD_H
 #define RECORD_H

@@ -1,9 +1,17 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
 
-#pragma once
+// server.h: global_server file header
 
 #ifndef SERVER_H
 #define SERVER_H
-
 
 #include "athdns.h"
 #include "dns.h"

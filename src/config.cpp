@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
+
+// config.cpp: config file parser implement
 
 #include "athdns.h"
 #include "config_file.h"

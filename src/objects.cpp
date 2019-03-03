@@ -1,3 +1,15 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
+
+// objects.cpp: global objects implements
+
 #include "objects.h"
 #include "dns.h"
 #include "utils.h"

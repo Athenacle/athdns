@@ -1,5 +1,14 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
 
-#pragma once
+// logging.h: logging facility header
 
 #ifndef LOGGING_H
 #define LOGGING_H
