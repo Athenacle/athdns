@@ -31,16 +31,16 @@ namespace
         return std::stoi(part);
     }
 
+    inline std::queue<char *> &get_empty_pool()
+    {
+        static std::queue<char *> empty_pool;
+        return empty_pool;
+    }
+
     inline std::vector<char *> &get_pool()
     {
         static std::vector<char *> pool;
         return pool;
-    }
-
-    inline utils::bit_container &get_bitmap()
-    {
-        static utils::bit_container container(512);
-        return container;
     }
 
     inline pthread_mutex_t *get_mutex()
@@ -49,35 +49,37 @@ namespace
         return &mutex;
     }
 
-    inline std::unordered_map<char *, size_t> &get_pointer_map()
+    const bool buffer_used = true;
+
+    struct map_entry {
+        size_t offset;
+        bool used;
+        map_entry(size_t t) : offset(t)
+        {
+            used = !buffer_used;
+        }
+    };
+
+    inline std::unordered_map<char *, map_entry *> &get_pointer_map()
     {
-        static std::unordered_map<char *, size_t> map;
+        static std::unordered_map<char *, map_entry *> map;
         return map;
     }
 
-    size_t find_first_false(const utils::bit_container &bitmap)
+    void resize_pool(size_t new_size)
     {
-        auto s = bitmap.size();
-        for (size_t i = 0; i < s; i++) {
-            if (!bitmap.test(i)) {
-                return i;
-            }
-        }
-        return -1u;
-    }
-
-    void resize_pool(int new_size)
-    {
-        auto &bs = get_bitmap();
-        bs.resize(new_size);
+        auto &eq = get_empty_pool();
         auto &vec = get_pool();
+        auto &map = get_pointer_map();
         vec.reserve(new_size);
-        for (int i = 0; i < new_size; i++) {
-            vec[i] = new char[recv_buffer_size];
+        map.reserve(new_size);
+        for (size_t i = vec.size(); i < new_size; i++) {
+            auto p = new char[recv_buffer_size];
+            vec.emplace_back(p);
+            eq.emplace(p);
+            map.insert({p, new map_entry(i)});
         }
     }
-
-
 }  // namespace
 
 
@@ -85,66 +87,55 @@ namespace utils
 {
     char *get_buffer()
     {
-        auto &vec = get_pool();
-        auto &bitmap = get_bitmap();
         auto mutex = get_mutex();
-        auto &pointer_map = get_pointer_map();
+        auto &map = get_pointer_map();
+        auto &eq = get_empty_pool();
+        char *ret = nullptr;
         pthread_mutex_lock(mutex);
-        size_t offset = find_first_false(bitmap);
-        if (offset == -1u) {
-            resize_pool(bitmap.size() * 2);
-            offset = find_first_false(bitmap);
+        {
+            if (unlikely(eq.empty())) {
+                resize_pool(map.size() << 1);
+            }
+            ret = eq.front();
+            eq.pop();
+            map.find(ret)->second->used = buffer_used;
         }
-        auto ret = vec[offset];
-        bitmap.set(offset, true);
-        pointer_map.insert({ret, offset});
-        pointer_map[ret] = offset;
-
         pthread_mutex_unlock(mutex);
         return ret;
-    }  // namespace utils
+    }
 
     void free_buffer(char *buffer)
     {
-        auto &bitmap = get_bitmap();
         auto mutex = get_mutex();
         auto &map = get_pointer_map();
-
+        auto &eq = get_empty_pool();
         pthread_mutex_lock(mutex);
-        auto p = map.find(buffer);
-        assert(p != map.end());
-        bitmap.set(p->second, false);
+        {
+            map.find(buffer)->second->used = !buffer_used;
+            eq.emplace(buffer);
+        }
         pthread_mutex_unlock(mutex);
     }
 
     void destroy_buffer()
     {
-        auto &vec = get_pool();
         auto mutex = get_mutex();
+        auto &map = get_pointer_map();
 
         pthread_mutex_lock(mutex);
-        for (auto &p : vec) {
-            delete[] p;
+        {
+            for (auto &p : map) {
+                delete p.second;
+                delete[] p.first;
+            }
         }
         pthread_mutex_unlock(mutex);
-
         pthread_mutex_destroy(mutex);
     }
 
-
     void init_buffer_pool(int buf_count)
     {
-        auto &vec = get_pool();
-        auto &bitmap = get_bitmap();
-        auto &map = get_pointer_map();
-        map.reserve(buf_count);
-        vec.reserve(buf_count + 1);
-        bitmap.resize(buf_count);
-        for (int i = 0; i < buf_count; i++) {
-            auto buf = new char[recv_buffer_size];
-            vec.emplace_back(buf);
-            bitmap.set(i, false);
-        }
+        resize_pool(buf_count);
         pthread_mutex_init(get_mutex(), nullptr);
     }
 
