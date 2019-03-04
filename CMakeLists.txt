@@ -58,6 +58,7 @@ set(ATHDNS_LIB_SRC
   src/record.cpp
   src/server.cpp
   src/objects.cpp
+  src/remote.cpp
   src/utils.cpp)
 
 include(FindFLEX)

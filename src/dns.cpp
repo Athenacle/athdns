@@ -244,6 +244,10 @@ namespace dns
         //pointer should be first byte of Answer section
         //Note: 12 = DNS header length, 6 = 2 + 2 + 2 => query_name + DNS_TYPE + DNS_CLASS
 
+        if ((getAuthorityRRCount() + getAnswerRRCount()) == 0) {
+            return nullptr;
+        }
+        uint8_t* end = _data + _size;
         int answer_count = 0;
 
         uint8_t* begin = pointer;
@@ -282,8 +286,7 @@ namespace dns
             } else {
                 node->set_tail(new_node);
             }
-            if (begin >= _data + _size
-                || answer_count >= getAnswerRRCount() + getAuthorityRRCount()) {
+            if (begin >= end || answer_count >= getAnswerRRCount() + getAuthorityRRCount()) {
                 break;
             }
         }

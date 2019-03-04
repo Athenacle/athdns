@@ -67,6 +67,8 @@ void uvcb_server_incoming_alloc(uv_handle_t *, size_t, uv_buf_t *);
 void uvcb_server_incoming_recv(
     uv_udp_t *, ssize_t, const uv_buf_t *, const struct sockaddr *, unsigned int);
 
+void uvcb_remote_udp_recv(uv_udp_t *, ssize_t, const uv_buf_t *, const sockaddr *, unsigned int);
+
 //utils
 
 namespace utils

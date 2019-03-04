@@ -17,6 +17,7 @@
 #include "dns.h"
 #include "hash.h"
 #include "objects.h"
+#include "remote.h"
 
 #include <pthread.h>
 #include <semaphore.h>
@@ -27,125 +28,17 @@
 #include <queue>
 #include <unordered_map>
 
+using remote::remote_nameserver;
+
 void uvcb_incoming_request_worker(uv_work_t *);
 
 void uvcb_incoming_request_response_send_complete(uv_udp_send_t *, int);
-
-void uvcb_remote_recv(uv_udp_t *, ssize_t, const uv_buf_t *, const sockaddr *, unsigned int);
 
 void uvcb_async_response_send(uv_async_t *);
 
 void uvcb_async_remote_response_send(uv_async_t *);
 
-void uvcb_remote_nameserver_send_complete(uv_udp_send_t *, int);
-
-void uvcb_async_remote_send(uv_async_t *);
-
 void uvcb_timer_cleaner(uv_timer_t *);
-
-struct uv_udp_sending {
-    pthread_mutex_t *lock;
-    objects::send_object *obj;
-    uv_udp_t *handle;
-};
-
-struct uv_udp_nameserver_runnable {
-    uv_loop_t *loop;
-    uv_udp_t *udp;
-    uv_async_t *async;
-    uv_async_t *async_send;
-    pthread_mutex_t *lock;
-    pthread_t thread;
-    static utils::atomic_int count;
-
-    std::queue<uv_udp_sending *> sending_queue;
-
-public:
-    uv_udp_nameserver_runnable() {}
-
-    void set_data(void *p)
-    {
-        udp->data = p;
-    }
-
-    void swap(uv_udp_nameserver_runnable &ns);
-
-    void init();
-
-    void start(uv_run_mode mode = UV_RUN_DEFAULT);
-
-    void stop();
-    void send(objects::send_object *);
-    void destroy();
-};
-
-
-struct remote_nameserver {
-    uv_udp_nameserver_runnable run;
-
-    int index;
-    int port;
-    sockaddr_in *sock;
-    ip_address ip;
-
-    pthread_spinlock_t *sending_lock;
-    std::map<uint16_t, objects::forward_item_pointer> sending;
-
-    utils::atomic_int request_forward_count;
-    utils::atomic_int response_count;
-
-    remote_nameserver(remote_nameserver &&);
-
-    remote_nameserver(const ip_address &&, int = 53);
-    remote_nameserver(uint32_t, int = 53);
-    ~remote_nameserver();
-
-    bool operator==(const ip_address &);
-    bool operator==(uint32_t);
-
-    void swap(const remote_nameserver &);
-
-    int get_index() const
-    {
-        return index;
-    }
-
-    void set_index(int i)
-    {
-        index = i;
-    }
-
-    void to_string(string &) const;
-
-    operator const sockaddr *() const
-    {
-        return reinterpret_cast<const sockaddr *>(sock);
-    }
-
-    const sockaddr *get_sockaddr()
-    {
-        return reinterpret_cast<const sockaddr *>(sock);
-    }
-
-    remote_nameserver *get_address()
-    {
-        return this;
-    }
-
-    void start_remote();
-
-    void stop_remote()
-    {
-        run.stop();
-        pthread_join(run.thread, nullptr);
-    }
-
-    void send(objects::send_object *obj);
-
-
-private:
-    remote_nameserver(const remote_nameserver &) = delete;
-};
 
 class global_server
 {
@@ -158,7 +51,7 @@ class global_server
     using static_address_type = std::tuple<string, uint32_t>;
     using queue_item = std::tuple<uv_buf_t *, const sockaddr *, ssize_t>;
 
-    std::vector<remote_nameserver> remote_address;
+    std::vector<remote_nameserver *> remote_address;
     std::vector<static_address_type> *static_address;
 
     std::unordered_map<uint16_t, objects::forward_item_pointer> forward_table;
@@ -328,7 +221,7 @@ public:
 
     void set_server_log_level(utils::log_level);
 
-    const std::vector<remote_nameserver> &get_remote_server() const
+    const std::vector<remote_nameserver *> &get_remote_server() const
     {
         return remote_address;
     }

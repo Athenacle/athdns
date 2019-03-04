@@ -28,170 +28,13 @@ using namespace objects;
 
 global_server* global_server::server_instance = nullptr;
 
-void uv_udp_nameserver_runnable::swap(uv_udp_nameserver_runnable& ns)
-{
-    std::swap(loop, ns.loop);
-    std::swap(udp, ns.udp);
-    std::swap(async, ns.async);
-}
-
-void uv_udp_nameserver_runnable::start(uv_run_mode mode)
-{
-    uv_udp_recv_start(udp, uvcb_server_incoming_alloc, uvcb_remote_recv);
-    uv_run(loop, mode);
-}
-
-void uv_udp_nameserver_runnable::stop()
-{
-    uv_async_send(async);
-    pthread_join(thread, nullptr);
-}
-
-void uv_udp_nameserver_runnable::send(send_object* obj)
-{
-    count++;
-    uv_udp_sending* sending = new uv_udp_sending;
-    sending->lock = lock;
-    sending->handle = udp;
-    sending->obj = obj;
-
-    pthread_mutex_lock(lock);
-    sending_queue.emplace(sending);
-    pthread_mutex_unlock(lock);
-
-    uv_async_send(async_send);
-}
-
-void uv_udp_nameserver_runnable::destroy()
-{
-    pthread_mutex_destroy(lock);
-    uv_loop_close(loop);
-    delete loop;
-    delete async_send;
-    delete lock;
-    delete udp;
-    delete async;
-}
-
-void uv_udp_nameserver_runnable::init()
-{
-    lock = new pthread_mutex_t;
-    async = new uv_async_t;
-    udp = new uv_udp_t;
-    loop = new uv_loop_t;
-
-    pthread_mutex_init(lock, nullptr);
-    uv_loop_init(loop);
-
-    pthread_mutex_lock(lock);
-    async_send = new uv_async_t;
-    uv_async_init(loop, async, [](uv_async_t* work) {
-        auto pointer = reinterpret_cast<uv_udp_nameserver_runnable*>(work->data);
-        uv_udp_recv_stop(pointer->udp);
-        uv_walk(pointer->loop, [](uv_handle_t* t, void*) { uv_close(t, nullptr); }, nullptr);
-        uv_stop(pointer->loop);
-    });
-    uv_async_init(loop, async_send, uvcb_async_remote_send);
-    async_send->data = this;
-    async->data = this;
-
-    pthread_mutex_unlock(lock);
-
-    uv_udp_init(loop, udp);
-
-    udp->data = this;
-}
-
-// remote nameserver
-void remote_nameserver::send(send_object* obj)
-{
-    run.send(obj);
-}
-void remote_nameserver::to_string(string& str) const
-{
-    ip.to_string(str);
-    str.append(":").append(std::to_string(port));
-}
-
-remote_nameserver::~remote_nameserver()
-{
-    delete sending_lock;
-    if (sock != nullptr) {
-        delete sock;
-    }
-}
-
-remote_nameserver::remote_nameserver(remote_nameserver&& ns)
-{
-    index = ns.index;
-    port = ns.port;
-    sock = ns.sock;
-    ip = ns.ip;
-
-    sending_lock = ns.sending_lock;
-
-    std::swap(run, ns.run);
-    std::swap(request_forward_count, ns.request_forward_count);
-    std::swap(response_count, ns.response_count);
-    ns.sending_lock = nullptr;
-    ns.sock = nullptr;
-}
-
-remote_nameserver::remote_nameserver(const ip_address&& addr, int port)
-    : remote_nameserver(addr.get_address(), port)
-{
-}
-
-remote_nameserver::remote_nameserver(uint32_t addr, int p) : ip(addr)
-{
-    index = 0;
-    port = p;
-    string ip_string;
-    sock = new sockaddr_in;
-    ip.to_string(ip_string);
-    auto ret = uv_ip4_addr(ip_string.c_str(), port, sock);
-    assert(ret == 0);
-    sending_lock = new pthread_spinlock_t;
-    pthread_spin_init(sending_lock, PTHREAD_PROCESS_PRIVATE);
-}
-
-bool remote_nameserver::operator==(uint32_t ipaddr)
-{
-    return ip == ipaddr;
-}
-
-
-void remote_nameserver::start_remote()
-{
-    run.init();
-    run.set_data(this);
-    pthread_create(&run.thread,
-                   nullptr,
-                   [](void* param) -> void* {
-                       auto pointer = reinterpret_cast<uv_udp_nameserver_runnable*>(param);
-                       pointer->start();
-                       return nullptr;
-                   },
-                   &run);
-}
-
 //////////////////////////////////////////////////////////////////////
 
 void global_server::cleanup()
 {
     int c = 0;
     for (auto& ns : remote_address) {
-        pthread_spin_lock(ns.sending_lock);
-        const auto& end = ns.sending.end();
-        for (auto itor = ns.sending.begin(); itor != end;) {
-            if (itor->second->get_response_send()) {
-                itor = ns.sending.erase(itor);
-                c++;
-            } else {
-                ++itor;
-            }
-        }
-        pthread_spin_unlock(ns.sending_lock);
+        c += ns->clean_sent();
     }
     DEBUG("cleaned up {0} item", c);
 }
@@ -199,16 +42,15 @@ void global_server::cleanup()
 void global_server::add_remote_address(uint32_t ip)
 {
     for (auto& ns : remote_address) {
-        if (ns == ip) {
+        if (*ns == ip) {
             //TODO nameserver exists. Here should have a warning
             INFO("exists.");
             return;
         }
     }
-
-    remote_address.emplace_back(std::move(ip_address(ip)));
+    remote_nameserver* ns = new remote_nameserver(ip);
+    remote_address.emplace_back(ns);
 }
-
 
 void global_server::set_log_file(const CH* path)
 {
@@ -319,8 +161,8 @@ void global_server::init_server()
         exit(1);
     } else {
         for (size_t i = 0; i < remote_address.size(); i++) {
-            remote_address[i].set_index(i);
-            remote_address[i].start_remote();
+            remote_address[i]->set_index(i);
+            remote_address[i]->start_remote();
         }
     }
     int reportt = timer_timeout * 1000;
@@ -368,7 +210,7 @@ void global_server::init_server()
 global_server::~global_server()
 {
     for (auto& ns : remote_address) {
-        WARN("existing {0}", ns.sending.size());
+        WARN("existing {0}", ns->get_sending_size());
     }
 
     if (uv_main_loop != nullptr) {
@@ -376,6 +218,9 @@ global_server::~global_server()
     }
     if (table != nullptr) {
         delete table;
+    }
+    for (auto& ns : remote_address) {
+        delete ns;
     }
     pthread_spin_lock(&forward_table_lock);
     forward_table.clear();
@@ -422,8 +267,7 @@ void global_server::do_stop()
     INFO("stopping server.");
     uv_async_send(async_works);
     for (auto& ns : remote_address) {
-        ns.stop_remote();
-        ns.run.destroy();
+        ns->stop_remote();
     }
 }
 
@@ -438,19 +282,17 @@ void global_server::forward_item_all(forward_item_pointer& item)
         send_object* obj = new send_object;
         obj->bufs = item->req->buf;
         obj->bufs_count = 1;
-        obj->sock = reinterpret_cast<sockaddr*>(ns.sock);
+        obj->sock = reinterpret_cast<sockaddr*>(ns->get_sock());
 
 #ifdef DTRACE_OUTPUT
         string ns_string;
-        ns.to_string(ns_string);
+        ns->to_string(ns_string);
         DTRACE("OUT request {0} -> {1}", item->pack->getQuery().getName(), ns_string);
 #endif
 
-        ns.send(obj);
-        ns.request_forward_count++;
-        pthread_spin_lock(ns.sending_lock);
-        ns.sending.insert({item->forward_id, item});
-        pthread_spin_unlock(ns.sending_lock);
+        ns->send(obj);
+        ns->increase_forward();
+        ns->insert_sending({item->forward_id, item});
     }
 }
 
@@ -481,7 +323,6 @@ void global_server::send_response(response* resp)
     uv_async_send(sending_response_works);
 }
 
-
 void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
 {
     uint16_t* p = reinterpret_cast<uint16_t*>(buf->base);
@@ -489,6 +330,7 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
 
 #ifdef DTRACE_OUTPUT
     DnsPacket* dpack = DnsPacket::fromDataBuffer(buf);
+    dpack->parse();
     string ns_string;
     ns->to_string(ns_string);
     string node_string;
@@ -497,17 +339,11 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
         node->to_string(node_string);
         DTRACE(
             "IN response from {0}: {1}->{2}", ns_string, dpack->getQuery().getName(), node_string);
+        delete node;
     }
-    delete node;
     delete dpack;
 #endif
-
-    pthread_spin_lock(ns->sending_lock);
-    auto ns_forward_item = ns->sending.find(forward_id);
-    if (likely(ns_forward_item != ns->sending.end())) {
-        ns->sending.erase(forward_id);
-    }
-    pthread_spin_unlock(ns->sending_lock);
+    ns->find_erase(forward_id);
 
     pthread_spin_lock(&forward_table_lock);
     auto req = forward_table.find(forward_id);
@@ -522,10 +358,8 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
         pthread_spin_unlock(&forward_table_lock);
         DnsPacket* pack = DnsPacket::fromDataBuffer(buf);
         pack->parse();
-        if (unlikely(pack->getAnswerRRCount() != 0)) {
-            record_node* node = pack->generate_record_node();
-            cache_add_node(node);
-        }
+        record_node* node = pack->generate_record_node();
+        cache_add_node(node);
         delete pack;
         forward_response* resp = new forward_response(pointer, buf);
         send_response(resp);
@@ -579,7 +413,7 @@ void uvcb_incoming_request_worker(uv_work_t* work)
     }
 }
 
-void uvcb_remote_recv(
+void uvcb_remote_udp_recv(
     uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf, const sockaddr* sock, unsigned int)
 {
     if (nread <= 0) {
@@ -597,41 +431,6 @@ void uvcb_remote_recv(
     }
 }
 
-void uvcb_remote_nameserver_send_complete(uv_udp_send_t* send, int flag)
-{
-    if (unlikely(flag < 0)) {
-        WARN("send error {0}", uv_err_name(flag));
-    }
-
-    auto sending = reinterpret_cast<uv_udp_sending*>(send->data);
-    delete sending->obj;
-    delete sending;
-    delete send;
-}
-
-utils::atomic_int uv_udp_nameserver_runnable::count;
-
-void uvcb_async_remote_send(uv_async_t* send)
-{
-    auto sending_obj = reinterpret_cast<uv_udp_nameserver_runnable*>(send->data);
-    pthread_mutex_lock(sending_obj->lock);
-    while (sending_obj->sending_queue.size() > 0) {
-        auto i = sending_obj->sending_queue.front();
-        sending_obj->sending_queue.pop();
-        uv_udp_send_t* sending = new uv_udp_send_t;
-        sending->data = i;
-        auto flag = uv_udp_send(sending,
-                                i->handle,
-                                i->obj->bufs,
-                                i->obj->bufs_count,
-                                i->obj->sock,
-                                uvcb_remote_nameserver_send_complete);
-        if (unlikely(flag < 0)) {
-            ERROR("send failed: {0}", uv_err_name(flag));
-        }
-    }
-    pthread_mutex_unlock(sending_obj->lock);
-}
 
 void uvcb_timer_cleaner(uv_timer_t*)
 {

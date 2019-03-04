@@ -12,6 +12,8 @@
 
 #include "logging.h"
 
+#include "fmt/time.h"
+
 #include <unistd.h>
 
 #include <ctime>
