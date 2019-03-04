@@ -92,13 +92,9 @@ namespace hash
         using pointer = record_node *;
         using reference = record_type &;
         using const_reference = const record_type &;
-        using const_pointer = const record_type *;
 
         using container_type =
             std::unordered_map<domain_name, record_node *, unordered_map_hash, unordered_map_equal>;
-
-        using lock_type = pthread_spinlock_t;
-        using lock_pointer = lock_type *;
 
         using container_pointer = container_type *;
         using container_reference = container_type &;
@@ -107,8 +103,6 @@ namespace hash
 
     private:
         container_type container;
-        lock_pointer locks;
-        lock_pointer lru_lock;
 
         pointer lru_head;
         pointer lru_end;
@@ -118,11 +112,10 @@ namespace hash
 
         utils::atomic_number<size_type> saved;
 
-        mutable pthread_mutex_t mutex;
+        mutable pthread_rwlock_t table_rwlock;
+        mutable pthread_spinlock_t lru_lock;
 
     private:
-        alloc::allocator<lock_type> lock_alloc;
-
     public:
         hashtable(size_type size);
         ~hashtable();
