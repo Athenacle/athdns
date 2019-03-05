@@ -1,6 +1,18 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
+
+// dns_test.cpp: tests for dns::DnsPacket
+
+#include "test.h"
 
 #include "dns.h"
-#include "test.h"
 #include "utils.h"
 
 #include <bitset>
