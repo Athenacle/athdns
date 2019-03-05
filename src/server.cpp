@@ -108,7 +108,7 @@ void global_server::init_server_loop()
         while (queue.size() > 0) {
             auto item = queue.front();
             queue.pop();
-            auto send = new uv_udp_send_t;
+            auto send = global_server::get_server().new_uv_udp_send_t();
             send->data = item;
             uv_udp_send(send,
                         &global_server::get_server().server_udp,
@@ -118,7 +118,7 @@ void global_server::init_server_loop()
                         [](uv_udp_send_t* send, int) {
                             auto item = reinterpret_cast<found_response*>(send->data);
                             delete item;
-                            delete send;
+                            global_server::get_server().delete_uv_udp_send_t(send);
                         });
         }
         pthread_mutex_unlock(lock);
@@ -238,7 +238,9 @@ global_server::global_server()
       server_udp(),
       queue_lock(),
       queue_sem(),
-      sending_lock(PTHREAD_MUTEX_INITIALIZER)
+      sending_lock(PTHREAD_MUTEX_INITIALIZER),
+      uv_buf_t_pool(256),
+      uv_udp_send_t_pool(100)
 {
     response_sending_queue_lock = new pthread_mutex_t;
     total_request_count = 0;
@@ -265,6 +267,9 @@ global_server::global_server()
 void global_server::do_stop()
 {
     INFO("stopping server.");
+    DTRACE("uv_buf_t allocator max allocated {0},  uv_udp_send_t allocator max allocated {1}",
+           uv_buf_t_pool.get_max_allocated(),
+           uv_udp_send_t_pool.get_max_allocated());
     uv_async_send(async_works);
     for (auto& ns : remote_address) {
         ns->stop_remote();
@@ -350,7 +355,7 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
     if (req == forward_table.end()) {
         pthread_spin_unlock(&forward_table_lock);
         utils::free_buffer(buf->base);
-        delete buf;
+        delete_uv_buf_t(buf);
     } else {
         forward_item_pointer pointer = req->second;
         pointer->set_response_send();
@@ -424,13 +429,12 @@ void uvcb_remote_udp_recv(
         utils::free_buffer(buf->base);
     } else {
         auto ns = reinterpret_cast<remote_nameserver*>(udp->data);
-        uv_buf_t* nbuf = new uv_buf_t;
+        uv_buf_t* nbuf = global_server::get_server().new_uv_buf_t();
         nbuf->base = buf->base;
         nbuf->len = nread;
         global_server::get_server().response_from_remote(nbuf, ns);
     }
 }
-
 
 void uvcb_timer_cleaner(uv_timer_t*)
 {

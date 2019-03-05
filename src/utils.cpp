@@ -31,55 +31,12 @@ namespace
         return std::stoi(part);
     }
 
-    inline std::queue<char *> &get_empty_pool()
+    utils::allocator_pool<char, recv_buffer_size> **get_pool()
     {
-        static std::queue<char *> empty_pool;
-        return empty_pool;
+        static utils::allocator_pool<char, recv_buffer_size> *pool = nullptr;
+        return &pool;
     }
 
-    inline std::vector<char *> &get_pool()
-    {
-        static std::vector<char *> pool;
-        return pool;
-    }
-
-    inline pthread_mutex_t *get_mutex()
-    {
-        static pthread_mutex_t mutex;
-        return &mutex;
-    }
-
-    const bool buffer_used = true;
-
-    struct map_entry {
-        size_t offset;
-        bool used;
-        map_entry(size_t t) : offset(t)
-        {
-            used = !buffer_used;
-        }
-    };
-
-    inline std::unordered_map<char *, map_entry *> &get_pointer_map()
-    {
-        static std::unordered_map<char *, map_entry *> map;
-        return map;
-    }
-
-    void resize_pool(size_t new_size)
-    {
-        auto &eq = get_empty_pool();
-        auto &vec = get_pool();
-        auto &map = get_pointer_map();
-        vec.reserve(new_size);
-        map.reserve(new_size);
-        for (size_t i = vec.size(); i < new_size; i++) {
-            auto p = new char[recv_buffer_size];
-            vec.emplace_back(p);
-            eq.emplace(p);
-            map.insert({p, new map_entry(i)});
-        }
-    }
 }  // namespace
 
 
@@ -87,56 +44,26 @@ namespace utils
 {
     char *get_buffer()
     {
-        auto mutex = get_mutex();
-        auto &map = get_pointer_map();
-        auto &eq = get_empty_pool();
-        char *ret = nullptr;
-        pthread_mutex_lock(mutex);
-        {
-            if (unlikely(eq.empty())) {
-                resize_pool(map.size() << 1);
-            }
-            ret = eq.front();
-            eq.pop();
-            map.find(ret)->second->used = buffer_used;
-        }
-        pthread_mutex_unlock(mutex);
-        return ret;
+        static auto pool = *get_pool();
+        return pool->allocate();
     }
 
     void free_buffer(char *buffer)
     {
-        auto mutex = get_mutex();
-        auto &map = get_pointer_map();
-        auto &eq = get_empty_pool();
-        pthread_mutex_lock(mutex);
-        {
-            map.find(buffer)->second->used = !buffer_used;
-            eq.emplace(buffer);
-        }
-        pthread_mutex_unlock(mutex);
+        static auto pool = *get_pool();
+        pool->deallocate(buffer);
     }
 
     void destroy_buffer()
     {
-        auto mutex = get_mutex();
-        auto &map = get_pointer_map();
-
-        pthread_mutex_lock(mutex);
-        {
-            for (auto &p : map) {
-                delete p.second;
-                delete[] p.first;
-            }
-        }
-        pthread_mutex_unlock(mutex);
-        pthread_mutex_destroy(mutex);
+        auto pool = *get_pool();
+        delete pool;
     }
 
-    void init_buffer_pool(int buf_count)
+    void init_buffer_pool(size_t buf_count)
     {
-        resize_pool(buf_count);
-        pthread_mutex_init(get_mutex(), nullptr);
+        auto pool = get_pool();
+        *pool = new utils::allocator_pool<char, recv_buffer_size>(buf_count);
     }
 
     uint32_t rand_value()

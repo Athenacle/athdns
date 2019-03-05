@@ -1,14 +1,16 @@
 
 include(Gtest)
 
-include(CodeCoverage)
+if (${ATHDNS_ENABLE_CODE_COVERAGE})
+  include(CodeCoverage)
 
-append_coverage_compiler_flags()
+  append_coverage_compiler_flags()
 
-setup_target_for_coverage_lcov(
-  NAME dnstest_coverage
-  EXECUTABLE dnstest
-  DEPENDENCIES dnstest)
+  setup_target_for_coverage_lcov(
+    NAME dnstest_coverage
+    EXECUTABLE dnstest
+    DEPENDENCIES dnstest)
+endif()
 
 include_directories(${CMAKE_SOURCE_DIR}/test)
 

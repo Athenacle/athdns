@@ -73,14 +73,13 @@ void uvcb_remote_udp_recv(uv_udp_t *, ssize_t, const uv_buf_t *, const sockaddr 
 
 namespace utils
 {
-    void init_buffer_pool(int);
+    void init_buffer_pool(size_t);
 
     char *get_buffer();
 
     void free_buffer(char *);
 
     void destroy_buffer();
-
 
     void split(std::vector<string> &, const CH *, const CH);
 

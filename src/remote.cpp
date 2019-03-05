@@ -12,6 +12,7 @@
 
 #include "remote.h"
 #include "logging.h"
+#include "server.h"
 
 using namespace remote;
 
@@ -139,7 +140,7 @@ void remote_nameserver::init_remote()
         auto sending = reinterpret_cast<uv_udp_sending*>(send->data);
         delete sending->obj;
         delete sending;
-        delete send;
+        global_server::get_server().delete_uv_udp_send_t(send);
     };
 
     const auto& send_cb = [](uv_async_t* send) {
@@ -149,7 +150,7 @@ void remote_nameserver::init_remote()
         while (sending_obj->sending_queue.size() > 0) {
             auto i = sending_obj->sending_queue.front();
             sending_obj->sending_queue.pop();
-            uv_udp_send_t* sending = new uv_udp_send_t;
+            uv_udp_send_t* sending = global_server::get_server().new_uv_udp_send_t();
             sending->data = i;
             auto flag = uv_udp_send(
                 sending, i->handle, i->obj->bufs, i->obj->bufs_count, i->obj->sock, complete);

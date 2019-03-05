@@ -17,8 +17,11 @@
 
 #include <pthread.h>
 
-#include <cstring>      // memset
+#include <algorithm>
+#include <cstring>  // memset
+#include <queue>
 #include <type_traits>  // std::enable_if_t
+#include <unordered_map>
 
 namespace utils
 {
@@ -230,6 +233,139 @@ namespace utils
 
     long read_rss();
     bool check_uv_return_status(int, const char *);
+
+
+    template <class T, unsigned int N = 1>
+    class allocator_pool
+    {
+        static_assert(N >= 0, "N parameter cannot be zero. Single Object is 1");
+
+        using value_type = T;
+        using pointer = T *;
+
+    private:
+        struct __entry_map {
+            bool used;
+        };
+        pthread_spinlock_t *mutex;
+        std::queue<pointer> empty_queue;
+        std::unordered_map<pointer, __entry_map> pool_map;
+#ifndef NDEBUG
+        atomic_int allocated_count;
+        atomic_int max_allocated;
+        atomic_int deallocated_count;
+#endif
+        void lock() const
+        {
+            pthread_spin_lock(mutex);
+        }
+
+        void unlock() const
+        {
+            pthread_spin_unlock(mutex);
+        }
+
+        void resize(size_t s)
+        {
+            auto os = pool_map.size();
+            if (os >= s) {
+                return;
+            } else {
+                for (size_t i = os; i < s; ++i) {
+                    auto nv = reinterpret_cast<pointer>(malloc(N * sizeof(value_type)));
+                    empty_queue.emplace(nv);
+                    pool_map.insert({nv, __entry_map()});
+                }
+            }
+        }
+
+        pointer get_pointer()
+        {
+            lock();
+            if (likely(empty_queue.empty())) {
+                resize(pool_map.size() << 1);
+            }
+
+            auto ret = empty_queue.front();
+            empty_queue.pop();
+            auto itor = pool_map.find(ret);
+            itor->second.used = true;
+            unlock();
+            return ret;
+        }
+
+        void free_pointer(pointer p)
+        {
+            lock();
+            pool_map.find(p)->second.used = false;
+            empty_queue.emplace(p);
+            unlock();
+        }
+
+    public:
+        ~allocator_pool()
+        {
+            lock();
+            std::for_each(pool_map.begin(), pool_map.end(), [](auto &p) {
+                auto ptr = p.first;
+                free(ptr);
+            });
+            unlock();
+            pthread_spin_destroy(mutex);
+            delete mutex;
+        }
+
+        allocator_pool(size_t size)
+#ifndef NDEBUG
+            : allocated_count(0), max_allocated(0)
+#endif
+        {
+            mutex = new pthread_spinlock_t;
+            pthread_spin_init(mutex, PTHREAD_PROCESS_PRIVATE);
+            resize(size);
+        }
+
+        template <unsigned int _N = N>
+        typename std::enable_if_t<(_N >= 2), pointer> allocate()
+        {
+#ifndef NDEBUG
+            allocated_count++;
+#endif
+            pointer ret = get_pointer();
+            return ret;
+        }
+
+        template <unsigned int _N = N, class... Args>
+        std::enable_if_t<(_N == 1), pointer> allocate(const Args &... __args)
+        {
+#ifndef NDEBUG
+            allocated_count++;
+#endif
+            pointer ret = get_pointer();
+            new (ret) value_type(__args...);
+            return ret;
+        }
+
+        void deallocate(pointer p)
+        {
+#ifndef NDEBUG
+            deallocated_count++;
+            auto current = allocated_count - deallocated_count;
+            if (current > max_allocated) {
+                max_allocated.reset(current);
+            }
+#endif
+            p->~value_type();
+            free_pointer(p);
+        }
+
+#ifndef NDEBUG
+        int get_max_allocated()
+        {
+            return max_allocated;
+        }
+#endif
+    };
 
 }  // namespace utils
 

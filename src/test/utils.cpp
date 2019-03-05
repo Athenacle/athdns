@@ -1,10 +1,18 @@
 
-#include "utils.h"
-#include "athdns.h"
 #include "test.h"
 
+#include "athdns.h"
+#include "utils.h"
+
+#include <sys/time.h>
+
+#include <bitset>
+
 using namespace utils;
+using std::bitset;
 using std::vector;
+using utils::bit_container;
+
 
 #define ARRAY_SPLIT_TEST(len, c)                     \
     do {                                             \
@@ -15,6 +23,60 @@ using std::vector;
             EXPECT_EQ(data[i], arrays[i]);           \
         }                                            \
     } while (false);
+
+
+TEST(utils, alloctorVSnew)
+{
+    struct simple {
+        int t;
+        char buf[256];
+        long long *p;
+        bool b;
+        long long la[10];
+    };
+
+    const int count = 10000;
+    simple **array = new simple *[count];
+
+    std::vector<simple *> vec;
+    utils::allocator_pool<simple> spool(20000);
+    timeval allocator_begin;
+    gettimeofday(&allocator_begin, nullptr);
+
+    for (int i = 0; i < count; i++) {
+        simple *p = spool.allocate();
+        array[i] = p;
+    }
+    for (int i = 0; i < count; i++) {
+        spool.deallocate(array[i]);
+    }
+    timeval allocator_end;
+    gettimeofday(&allocator_end, nullptr);
+    vec.clear();
+    double alloctimeuse = 1000000.0 * (allocator_end.tv_sec - allocator_begin.tv_sec)
+                          + allocator_end.tv_usec - allocator_begin.tv_usec;
+    timeval nd_begin;
+    gettimeofday(&nd_begin, nullptr);
+
+    for (int i = 0; i < count; i++) {
+        simple *p = new simple;
+        array[i] = p;
+    }
+    for (int i = 0; i < count; i++) {
+        delete (array[i]);
+    }
+    timeval nd_end;
+    gettimeofday(&nd_end, nullptr);
+
+    double nduse =
+        1000000.0 * (nd_end.tv_sec - nd_begin.tv_sec) + nd_end.tv_usec - nd_begin.tv_usec;
+
+    char op = alloctimeuse > nduse ? '>' : '<';
+
+    std::cout << "allocator: " << alloctimeuse / 1000000 << " " << op << " nd: " << nduse / 1000000
+              << std::endl;
+    delete[] array;
+}
 
 TEST(utils, split)
 {
@@ -56,10 +118,6 @@ TEST(utils, split)
 
 #undef ARRAY_SPLIT_TEST
 
-#include <bitset>
-
-using std::bitset;
-using utils::bit_container;
 
 TEST(utils, bit_container)
 {
