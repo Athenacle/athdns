@@ -17,16 +17,30 @@ namespace remote
         ip_address remote_address;
         sockaddr_in *sock;
 
+        uv_loop_t *loop;
         pthread_mutex_t *sending_lock;
         int remote_port;
         int index;
 
         using sending_item_type = std::pair<uint16_t, objects::forward_item_pointer>;
 
+        pthread_t work_thread;
+
     protected:
         std::map<uint16_t, objects::forward_item_pointer> sending;
         utils::atomic_int request_forward_count;
         utils::atomic_int response_count;
+
+        uv_loop_t *get_loop()
+        {
+            return loop;
+        }
+
+        void init_loop();
+
+        void init_nameserver();
+
+        void destroy_nameserver();
 
     public:
         void increase_forward()
@@ -105,8 +119,6 @@ namespace remote
     class remote_nameserver : public remote::abstract_nameserver
     {
         // uv UDP handlers
-
-        uv_loop_t *loop;
         uv_udp_t *udp_handler;
 
         uv_async_t *async_send;
@@ -119,7 +131,7 @@ namespace remote
     public:
         remote_nameserver(const ip_address &&, int = 53);
         remote_nameserver(uint32_t, int = 53);
-        ~remote_nameserver();
+        virtual ~remote_nameserver() override;
 
         bool operator==(const ip_address &);
 
@@ -145,13 +157,6 @@ namespace remote
 
         void init_remote();
         void destroy_remote();
-
-        void start_work();
-
-        uv_loop_t *get_loop() const
-        {
-            return loop;
-        }
 
         uv_udp_t *get_udp_hander() const
         {

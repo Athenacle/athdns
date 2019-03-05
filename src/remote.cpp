@@ -21,6 +21,7 @@ abstract_nameserver::~abstract_nameserver()
     pthread_mutex_destroy(sending_lock);
     delete sending_lock;
     delete sock;
+    delete loop;
 }
 
 abstract_nameserver::abstract_nameserver(uint32_t __remote_ip, int __remote_port)
@@ -36,6 +37,8 @@ abstract_nameserver::abstract_nameserver()
     pthread_mutex_init(sending_lock, nullptr);
     index = 0;
     sock = nullptr;
+    loop = new uv_loop_t;
+    loop->data = this;
 }
 
 void abstract_nameserver::swap(abstract_nameserver& an)
@@ -95,11 +98,20 @@ bool abstract_nameserver::find_erase(uint16_t id)
     return found;
 }
 
+void abstract_nameserver::init_nameserver()
+{
+    uv_loop_init(loop);
+}
+
+void abstract_nameserver::destroy_nameserver()
+{
+    uv_loop_close(loop);
+}
+
 // remote_nameserver
 
 remote_nameserver::~remote_nameserver()
 {
-    delete loop;
     delete udp_handler;
     delete async_send;
     delete async_stop;
@@ -113,13 +125,12 @@ remote_nameserver::remote_nameserver(const ip_address&& addr, int port)
 
 remote_nameserver::remote_nameserver(uint32_t addr, int p) : remote::abstract_nameserver(addr, p)
 {
-    loop = new uv_loop_t;
     async_send = new uv_async_t;
     async_stop = new uv_async_t;
     udp_handler = new uv_udp_t;
     lock = new pthread_mutex_t;
 
-    async_send->data = async_stop->data = loop->data = udp_handler->data = this;
+    async_send->data = async_stop->data = udp_handler->data = this;
     pthread_mutex_init(lock, nullptr);
 }
 
@@ -128,8 +139,8 @@ void remote_nameserver::init_remote()
     const auto& stop_cb = [](uv_async_t* work) {
         auto pointer = reinterpret_cast<remote_nameserver*>(work->data);
         uv_udp_recv_stop(pointer->udp_handler);
-        uv_walk(pointer->loop, [](uv_handle_t* t, void*) { uv_close(t, nullptr); }, nullptr);
-        uv_stop(pointer->loop);
+        uv_walk(pointer->get_loop(), [](uv_handle_t* t, void*) { uv_close(t, nullptr); }, nullptr);
+        uv_stop(pointer->get_loop());
     };
 
     static const auto& complete = [](uv_udp_send_t* send, int flag) {
@@ -162,10 +173,11 @@ void remote_nameserver::init_remote()
     };
 
     init_socket();
-    uv_loop_init(loop);
-    uv_async_init(loop, async_stop, stop_cb);
-    uv_async_init(loop, async_send, send_cb);
-    uv_udp_init(loop, udp_handler);
+    init_nameserver();
+    auto l = get_loop();
+    uv_async_init(l, async_stop, stop_cb);
+    uv_async_init(l, async_send, send_cb);
+    uv_udp_init(l, udp_handler);
 }
 
 void remote_nameserver::to_string(string& str) const
@@ -190,7 +202,7 @@ void remote_nameserver::send(objects::send_object* obj)
 void remote_nameserver::destroy_remote()
 {
     pthread_mutex_destroy(lock);
-    uv_loop_close(loop);
+    destroy_nameserver();
 }
 
 void remote_nameserver::start_remote()
