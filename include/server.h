@@ -196,11 +196,13 @@ public:
         }
     }
 
+    static void init_instance()
+    {
+        server_instance = new global_server;
+    }
+
     static global_server &get_server()
     {
-        if (server_instance == nullptr)
-            server_instance = new global_server;
-
         return *server_instance;
     }
 

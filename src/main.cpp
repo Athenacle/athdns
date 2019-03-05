@@ -69,8 +69,8 @@ void uvcb_server_incoming_recv(
 
 int main(int argc, CH* const argv[])
 {
+    global_server::init_instance();
     logging::init_logging();
-
     utils::config_system(argc, argv);
     utils::init_buffer_pool(1024);
 
