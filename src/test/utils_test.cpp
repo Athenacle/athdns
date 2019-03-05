@@ -148,3 +148,26 @@ TEST(utils, bit_container)
         ASSERT_EQ(bs.test(i), bc.test(i)) << i;
     }
 }
+
+TEST(utils, base64Encode)
+{
+    struct pair {
+        char *base;
+        char *base64;
+        size_t len;
+    };
+
+    pair pairs[] = {{.base = "\n", .base64 = "Cg==", .len = 1},
+                    {.base = "12345", .base64 = "MTIzNDU=", .len = 5},
+                    {.base = "encode_base64", .base64 = "ZW5jb2RlX2Jhc2U2NA==", .len = 13},
+                    {.base = "\1\2\3\4\5", .base64 = "AQIDBAU=", .len = 5},
+                    {.base = "\1\2\3\4\5\0", .base64 = "AQIDBAU=", .len = 5}};
+
+    for (auto &p : pairs) {
+        auto res = utils::encode_base64(p.base, p.len);
+        auto res2 = utils::encode_base64(p.base);
+        EXPECT_STREQ(res2, p.base64) << p.base;
+        EXPECT_STREQ(res, p.base64) << p.base;
+        utils::strfree(res);
+    }
+}

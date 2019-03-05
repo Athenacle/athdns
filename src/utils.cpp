@@ -16,6 +16,14 @@
 
 #include <unistd.h>
 
+#ifdef HAVE_OPENSSL
+#include <openssl/bio.h>
+#include <openssl/buffer.h>
+#include <openssl/evp.h>
+#elif defined HAVE_MBEDTLS
+#include <mbedtls/base64.h>
+#endif
+
 #include <cctype>
 #include <cstdio>
 #include <random>
@@ -42,6 +50,48 @@ namespace
 
 namespace utils
 {
+    char *encode_base64(const char *buf)
+    {
+        return encode_base64(buf, utils::strlen(buf));
+    }
+
+    char *encode_base64(const void *buffer, size_t length)
+    {
+#ifdef HAVE_OPENSSL
+        BIO *bio, *b64;
+        BUF_MEM *mem_buf;
+
+        b64 = BIO_new(BIO_f_base64());
+        bio = BIO_new(BIO_s_mem());
+        bio = BIO_push(b64, bio);
+
+        BIO_set_flags(bio, BIO_FLAGS_BASE64_NO_NL);
+        BIO_write(bio, buffer, length);
+        BIO_flush(bio);
+        BIO_get_mem_ptr(bio, &mem_buf);
+        BIO_set_close(bio, BIO_NOCLOSE);
+        BIO_free_all(bio);
+
+        auto len = mem_buf->length;
+        auto ret = utils::str_allocate<char>(len + 1);
+        memcpy(ret, mem_buf->data, len);
+        ret[len] = 0;
+        return ret;
+#elif defined HAVE_MBEDTLS
+        size_t dest_len = 1.5 * length + 5;
+        auto ret = utils::str_allocate<unsigned char>(dest_len);
+        size_t out_len = 0;
+
+        auto status = mbedtls_base64_encode(
+            ret, dest_len, &out_len, reinterpret_cast<const unsigned char *>(buffer), length);
+        if (status == 0) {
+            return reinterpret_cast<char *>(ret);
+        } else {
+            return nullptr;
+        }
+#endif
+    }
+
     char *get_buffer()
     {
         static auto pool = *get_pool();

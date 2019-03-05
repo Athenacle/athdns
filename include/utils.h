@@ -234,6 +234,8 @@ namespace utils
     long read_rss();
     bool check_uv_return_status(int, const char *);
 
+    char *encode_base64(const void *, size_t);
+    char *encode_base64(const char *);
 
     template <class T, unsigned int N = 1>
     class allocator_pool
