@@ -65,20 +65,21 @@
 
 #endif
 
-#ifndef NDEBUG
-#ifdef HAVE_BUILTIN_EXPECT
+#if defined NDEBUG && defined HAVE_BUILTIN_EXPECT
 #define likely(exp) __builtin_expect((exp), 1)
 #define unlikely(exp) __builtin_expect((exp), 0)
 #endif  // HAVE_BUILTIN_EXPECT
-#else
-#define likely(exp) (exp)
-#define unlikely(exp) (exp)
-#endif  //NDEBUG
 
 #cmakedefine BIG_ENDIAN
 
 #ifndef BIG_ENDIAN
 #define LITTLE_ENDIAN
 #endif
+
+#cmakedefine HAVE_DOH_SUPPORT
+
+#cmakedefine HAVE_OPENSSL
+
+#cmakedefine HAVE_MBEDTLS
 
 #endif

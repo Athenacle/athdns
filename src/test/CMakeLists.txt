@@ -1,10 +1,10 @@
 
 include(Gtest)
 
+set(ATHDNS_GTEST_BIN_NAME dnstest)
+
 if (${ATHDNS_ENABLE_CODE_COVERAGE})
   include(CodeCoverage)
-
-  append_coverage_compiler_flags()
 
   setup_target_for_coverage_lcov(
     NAME dnstest_coverage
@@ -24,7 +24,7 @@ endif()
 
 set(ATHDNS_TEST_DIR ${CMAKE_SOURCE_DIR}/src/test)
 
-add_executable(dnstest
+add_executable(${ATHDNS_GTEST_BIN_NAME}
   ${ATHDNS_TEST_DIR}/test_dns.cpp
   ${ATHDNS_TEST_DIR}/utils.cpp
   ${ATHDNS_TEST_DIR}/test_utils.cpp
@@ -32,7 +32,7 @@ add_executable(dnstest
   ${ATHDNS_TEST_DIR}/dns_record.cpp
   ${ATHDNS_TEST_DIR}/main.cpp)
 
-add_dependencies(dnstest gtest)
+add_dependencies(${ATHDNS_GTEST_BIN_NAME} gtest)
 
-target_link_libraries(dnstest libgtest ${ATHDNS_LIBS} ${LIBUV_LIBRARIES})
+target_link_libraries(${ATHDNS_GTEST_BIN_NAME} libgtest ${ATHDNS_LIBS} ${LIBUV_LIBRARIES} ${SSL_LIB})
 

@@ -5,9 +5,29 @@ project(athdns C CXX)
 
 option(ATHDNS_ENABLE_TESTING "Enable Testing" OFF)
 option(ATHDNS_ENABLE_CODE_COVERAGE "Enable coverage reporting" OFF)
+option(ATHDNS_ENABLE_DOH "Enable DoH (DNS over Https)" ON)
+option(ATHDNS_USE_OPENSSL "Prefer OpenSSL as crypto library" ON)
+option(ATHDNS_USE_MBEDTLS "Prefer MBEDTLS as crypto library" OFF)
+
+if (${ATHDNS_ENABLE_DOH})
+  if (${ATHDNS_USE_OPENSSL} AND ${ATHDNS_USE_MBEDTLS})
+    message(STATUS "ATHDNS_USE_OPENSSL and ATHDNS_USE_MBEDTLS cannot be both set. Use OpenSSL.")
+    set(ATHDNS_USE_MBEDTLS OFF)
+  endif()
+
+  if (NOT ${ATHDNS_USE_OPENSSL} AND NOT ${ATHDNS_USE_MBEDTLS})
+    message(STATUS "ATHDNS_USE_OPENSSL and ATHDNS_USE_MBEDTLS cannot be both unset. Use OpenSSL.")
+    set(ATHDNS_USE_OPENSSL ON)
+  endif()
+endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake)
 set(ATHDNS_INCLUDE_ROOT ${CMAKE_SOURCE_DIR}/include/)
+set(ATHDNS_DEPS_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps)
+set(THIRD_PARTY_DIR ${ATHDNS_DEPS_DIR}/third_party)
+
+file(MAKE_DIRECTORY ${ATHDNS_DEPS_DIR})
+file(MAKE_DIRECTORY ${THIRD_PARTY_DIR})
 
 set(CMAKE_CXX_STANDARD 14)
 set(PROJECT_NAME athdns)
@@ -27,12 +47,41 @@ else()
   endif()
 endif()
 
-include(Fmt)
+include(ThirdParty)
 include(CompilerOptionCheck)
 include(ConfigCheck)
 include(FindLibuv)
 include(FindJemalloc)
 include(TestBigEndian)
+
+set(SSL_LIB)
+
+if(${ATHDNS_ENABLE_DOH})
+  set(HAVE_DOH_SUPPORT ON)
+  if (${ATHDNS_USE_OPENSSL})
+    include(FindOpenSSL)
+    if (NOT ${OpenSSL_FOUND})
+      message(FATAL_ERROR "OpenSSL not found.")
+    else()
+      set(HAVE_OPENSSL ON)
+      include_directories(${OPENSSL_INCLUDE_DIR})
+      list(APPEND SSL_LIB ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
+    endif()
+  else()
+    if (${ATHDNS_USE_MBEDTLS})
+      include(FindMbedTLS)
+      if (NOT ${MBEDTLS_FOUND})
+        message(FATAL_ERROR "MbedTLS not found.")
+      else()
+        set(HAVE_MBEDTLS ON)
+        include_directories(${MBEDTLS_INCLUDE_DIRS})
+        list(APPEND SSL_LIB ${MBEDTLS_LIBRARY})
+      endif()
+    else()
+      message(FATAL_ERROR "No OpenSSL or MbedTLS specified.")
+    endif()
+  endif()
+endif()
 
 if(${ATHDNS_ENABLE_CODE_COVERAGE})
   add_library(coverage_config INTERFACE)
@@ -68,9 +117,8 @@ find_package(FLEX)
 find_package(BISON)
 
 set(ATHDNS_PARSER_DIR ${CMAKE_SOURCE_DIR}/src/parser)
-set(ATHDNS_PARSER_RESULT_DIR ${CMAKE_CURRENT_BINARY_DIR}/deps/config_parser)
+set(ATHDNS_PARSER_RESULT_DIR ${ATHDNS_DEPS_DIR}/config_parser)
 
-file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/deps)
 file(MAKE_DIRECTORY ${ATHDNS_PARSER_RESULT_DIR})
 
 bison_target(ConfigParser ${ATHDNS_PARSER_DIR}/config_file.y
@@ -92,13 +140,17 @@ add_library(utils STATIC
   ${ATHDNS_PARSER_RESULT_DIR}/flex_lexer.c
   ${ATHDNS_PARSER_RESULT_DIR}/bison_parser.c)
 
-add_dependencies(utils fmt)
+set(ATHDNS_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/bin)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${ATHDNS_BIN_DIR})
+file(MAKE_DIRECTORY ${ATHDNS_BIN_DIR})
+
+set(ATHDNS_BIN_NAME ${ATHDNS_BIN_DIR}/${PROJECT_NAME})
+
+add_dependencies(utils 3party)
 
 add_executable(${PROJECT_NAME} ${CMAKE_SOURCE_DIR}/src/main.cpp)
 
-set(ATHDNS_LIBS ${ATHDNS_LIBS} utils)
-
-list(APPEND ATHDNS_LIBS libfmt)
+set(ATHDNS_LIBS ${ATHDNS_LIBS} utils ${THIRD_PARTY_LIBRARIES})
 
 if(${JEMALLOC_FOUND})
   set(HAVE_JEMALLOC ON)
@@ -115,7 +167,7 @@ configure_file(${ATHDNS_INCLUDE_ROOT}/config.h.in
 
 add_definitions(-DHAVE_CONFIG_H)
 
-target_link_libraries(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${ATHDNS_LIBS} pthread)
+target_link_libraries(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${ATHDNS_LIBS} ${SSL_LIB} pthread)
 
 if (${ATHDNS_ENABLE_TESTING})
   enable_testing()
