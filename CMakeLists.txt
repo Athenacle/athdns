@@ -168,7 +168,7 @@ configure_file(${ATHDNS_INCLUDE_ROOT}/config.h.in
 
 add_definitions(-DHAVE_CONFIG_H)
 
-target_link_libraries(${PROJECT_NAME} ${LIBUV_LIBRARIES} ${ATHDNS_LIBS} ${SSL_LIB} pthread)
+target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS} ${LIBUV_LIBRARIES} ${SSL_LIB} pthread)
 
 if (${ATHDNS_ENABLE_TESTING})
   enable_testing()

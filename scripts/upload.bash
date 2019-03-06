@@ -27,6 +27,8 @@ cat >> package.json << EOF
 }
 EOF
 
+node --version
+
 npm install
 
 SHA=$(git rev-parse HEAD)

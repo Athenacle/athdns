@@ -6,7 +6,11 @@ compiler:
 addons:
   apt:
     update: true
-    packages: libuv1-dev bison flex lcov libmbedtls-dev libssl-dev nodejs npm
+    sources:
+      - ubuntu-toolchain-r-test
+    packages: libuv1-dev bison flex lcov libmbedtls-dev libssl-dev gcc-7 g++-7
+before_install:
+    - export CXX="g++-7" CC="gcc-7"
 script: 
   - scripts/build.sh
 after_success:
