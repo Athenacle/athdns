@@ -13,6 +13,8 @@
 #ifndef RECORD_H
 #define RECORD_H
 
+#include "fmt/format.h"
+
 #include <arpa/inet.h>
 #include "athdns.h"
 
@@ -192,5 +194,42 @@ public:
     virtual void to_string(string &) const override;
     domain_name get_actual_name() const;
 };
+
+namespace fmt
+{
+    template <>
+    struct formatter<record_node> {
+        template <typename PC>
+        constexpr auto parse(PC &ctx)
+        {
+            return ctx.begin();
+        }
+
+        template <typename FC>
+        auto format(const record_node &p, FC &ctx)
+        {
+            string str;
+            p.to_string(str);
+            return format_to(ctx.begin(), "{0}->{0}", p.get_name(), str);
+        }
+    };
+
+    template <>
+    struct formatter<ip_address> {
+        template <class PC>
+        constexpr auto parse(PC &ctx)
+        {
+            return ctx.begin();
+        }
+
+        template <class T>
+        auto format(const ip_address &ip, T &ctx)
+        {
+            string str;
+            ip.to_string(str);
+            return format_to(ctx.begin(), "{0}", str);
+        }
+    };
+}  // namespace fmt
 
 #endif

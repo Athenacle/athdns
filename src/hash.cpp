@@ -14,10 +14,6 @@
 #include "athdns.h"
 #include "logging.h"
 
-#ifndef NDEBUG
-#include "format.h"
-#endif
-
 #include <pthread.h>
 
 #include <algorithm>
