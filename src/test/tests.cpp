@@ -13,6 +13,7 @@
 #include "test.h"
 
 #include "logging.h"
+#include "server.h"
 
 #include <random>
 
@@ -42,19 +43,83 @@ namespace test
         buffer[actual_size] = '\0';
         return buffer;
     }
-
-
 }  // namespace test
+
+#ifdef BUILD_ROOT
+namespace
+{
+    struct combined_testing {
+        char** argv;
+        pthread_barrier_t* barrier;
+        pthread_t pthread;
+        bool started;
+    };
+
+    struct combined_testing* test_obj = nullptr;
+}  // namespace
+
+#endif
+
+void* combined_test_startup(void*)
+{
+#if defined BUILD_ROOT
+    WARN("starting global_server");
+    const char test_conf_file[] = BUILD_ROOT "/src/test/test.conf";
+    test_obj->argv[0] = utils::strdup(PROJECT_NAME);
+    test_obj->argv[1] = utils::strdup(test_conf_file);
+    if (access(test_conf_file, R_OK) == 0) {
+        global_server::init_instance();
+        utils::config_system(2, test_obj->argv);
+        utils::init_buffer_pool(512);
+        auto& s = global_server::get_server();
+        s.init_server();
+        pthread_barrier_wait(test_obj->barrier);
+        test_obj->started = true;
+        s.start_server();
+    }
+#endif
+    return nullptr;
+}
+
+void stop_test_server()
+{
+#ifdef BUILD_ROOT
+    if (test_obj->started) {
+        global_server::get_server().do_stop();
+        pthread_join(test_obj->pthread, nullptr);
+        global_server::destroy_server();
+        utils::destroy_buffer();
+        pthread_barrier_destroy(test_obj->barrier);
+        delete test_obj->barrier;
+    }
+    utils::strfree(test_obj->argv[0]);
+    utils::strfree(test_obj->argv[1]);
+    delete[] test_obj->argv;
+    delete test_obj;
+#endif
+}
 
 
 #if !defined _WIN32 || !defined _WIN64
 int main(int argc, char* argv[])
 {
     logging::init_logging();
-    logging::set_default_level(utils::LL_TRACE);
+#ifdef BUILD_ROOT
+    test_obj = new combined_testing;
+    test_obj->argv = new char*[2];
+    test_obj->started = false;
+    test_obj->barrier = new pthread_barrier_t;
+    pthread_barrier_init(test_obj->barrier, nullptr, 2);
+    pthread_create(&test_obj->pthread, nullptr, combined_test_startup, nullptr);
+    pthread_barrier_wait(test_obj->barrier);
+#endif
+
     ::testing::InitGoogleTest(&argc, argv);
     int ret = RUN_ALL_TESTS();
+
+    stop_test_server();
     logging::destroy_logger();
+
     return ret;
 }
 #endif
