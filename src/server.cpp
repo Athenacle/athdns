@@ -40,6 +40,7 @@ ip_address* global_server::sync_internal_query_A(const char* domain)
         auto a = node->get_record_A();
         if (a != nullptr) {
             auto ret = new ip_address(*a);
+            TRACE("internal DNS Query, cached response: {0} -> {1}", domain, *ret);
             return ret;
         }
     }
@@ -66,7 +67,7 @@ ip_address* global_server::sync_internal_query_A(const char* domain)
     if (node != nullptr) {
         auto a = node->get_record_A();
         if (a != nullptr) {
-            TRACE("internal DNS Query: {0} -> {1}", domain, *a);
+            TRACE("internal DNS Query, forward response: {0} -> {1}", domain, *a);
             return a;
         }
     }

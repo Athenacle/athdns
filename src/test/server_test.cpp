@@ -18,25 +18,28 @@
 
 TEST(server, sync_internal_query_A)
 {
-    const char site[] = "www.example.org";
-    int count = 0;
-    auto weo = test::system_query_A(site, count);
-    auto ips = global_server::get_server().sync_internal_query_A(site);
-    ASSERT_TRUE(weo != nullptr);
-    ASSERT_TRUE(ips != nullptr);
-    bool exists = false;
-    for (int i = 0; i < count; i++) {
-        if (weo[i]->operator==(ips->get_address())) {
-            exists = true;
+    for (int i = 0; i < 2; i++) {
+        //check twice, go through two branches in global_server::sync_internal_query_A
+        const char site[] = "www.example.org";
+        int count = 0;
+        auto weo = test::system_query_A(site, count);
+        auto ips = global_server::get_server().sync_internal_query_A(site);
+        ASSERT_TRUE(weo != nullptr);
+        ASSERT_TRUE(ips != nullptr);
+        bool exists = false;
+        for (int i = 0; i < count; i++) {
+            if (weo[i]->operator==(ips->get_address())) {
+                exists = true;
+            }
         }
-    }
-    EXPECT_TRUE(exists);
+        EXPECT_TRUE(exists);
 
-    for (int i = 0; i < count; i++) {
-        delete weo[i];
+        for (int i = 0; i < count; i++) {
+            delete weo[i];
+        }
+        delete[] weo;
+        delete ips;
     }
-    delete[] weo;
-    delete ips;
 }
 
 #endif

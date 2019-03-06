@@ -17,9 +17,12 @@ if ((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR
   check_cxx_compiler_flag(-Wno-format-nonliteral COMPILER_SUPPORT_NO_FORMAT_NONLITERAL)
   check_cxx_compiler_flag(-fsanitize=address COMPILER_SUPPORT_FSANITIZE_ADDRESS)
   check_cxx_compiler_flag(-Wno-zero-as-null-pointer-constant COMPILER_SUPPORT_NO_ZERO_AS_NULL)
+  check_cxx_compiler_flag(-Wno-unused-command-line-argument COMPILER_SUPPORT_UNUSED_COMMAND_LINE_ARG)
 
+  if (${COMPILER_SUPPORT_UNUSED_COMMAND_LINE_ARG})
+    add_compile_options(-Wno-unused-command-line-argument)
+  endif()
   if (${COMPILER_SUPPORT_WEVERYTHING})
-    add_compile_options(-Weverything)
   else()
     if (${COMPILER_SUPPORT_WALL})
       add_compile_options(-Wall)
