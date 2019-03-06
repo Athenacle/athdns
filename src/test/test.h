@@ -29,6 +29,8 @@ namespace test
     rand_result random_value();
     const CH *random_string(int = -1);
 
+    ip_address **system_query_A(const char *, int &);
+
 };  // namespace test
 
 

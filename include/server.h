@@ -93,6 +93,7 @@ class global_server
     int forward_type;
 
     pthread_mutex_t sending_lock;
+    pthread_barrier_t *internal_barrier;
 
     global_server(const global_server &) = delete;
     void operator=(const global_server &) = delete;
@@ -267,7 +268,7 @@ public:
         return current_time;
     }
 
-    ip_address *sync_internal_query_A(char *);
+    ip_address *sync_internal_query_A(const char *);
 };
 
 

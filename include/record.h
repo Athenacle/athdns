@@ -151,6 +151,8 @@ public:
 
     int to_data(
         uint8_t *buffer, size_t buf_size, int, uint16_t &rr_count, uint16_t &ra_count) const;
+
+    ip_address *get_record_A() const;
 };
 
 class record_node_A : public record_node
@@ -175,8 +177,6 @@ public:
     bool operator==(const ip_address &) const;
 
     virtual void to_string(string &) const override;
-
-    //virtual int to_data(uint8_t *buffer, size_t buf_size, int answer_offset) const override;
 };
 
 class record_node_CNAME : public record_node

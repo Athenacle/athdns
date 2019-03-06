@@ -43,6 +43,43 @@ namespace test
         buffer[actual_size] = '\0';
         return buffer;
     }
+
+    ip_address** system_query_A(const char* domain, int& count)
+    {
+        if (domain == nullptr) {
+            return nullptr;
+        }
+        count = 0;
+        hostent* ht;
+        ip_address** ret = nullptr;
+        ht = gethostbyname(domain);
+        if (ht != nullptr) {
+            std::vector<char*> dots;
+            if (ht->h_addrtype == AF_INET) {
+                char** list = ht->h_addr_list;
+                for (auto p = list; *p != nullptr; p++) {
+                    char* dest = new char[20];
+                    if (inet_ntop(AF_INET, *p, dest, 20) != nullptr) {
+                        dots.emplace_back(dest);
+                    } else {
+                        delete[] dest;
+                    }
+                }
+            }
+            ret = new ip_address*[dots.size()];
+            for (size_t i = 0; i < dots.size(); i++) {
+                uint32_t ip;
+                if (utils::check_ip_address(dots[i], ip)) {
+                    ret[i] = new ip_address(ip);
+                    count++;
+                }
+                delete[] dots[i];
+            }
+        }
+        return ret;
+    }
+
+
 }  // namespace test
 
 #ifdef BUILD_ROOT

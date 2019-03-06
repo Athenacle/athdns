@@ -39,6 +39,20 @@ void ip_address::to_string(string &buffer) const
 
 // class record node
 
+ip_address *record_node::get_record_A() const
+{
+    auto node = this;
+    while (node != nullptr) {
+        if (node->record_type == DNS_TYPE_A) {
+            const uint8_t *value = node->get_value();
+            const uint32_t ip = ntohl(*reinterpret_cast<const uint32_t *>(value));
+            return new ip_address(ip);
+        } else {
+            node = node->node_next;
+        }
+    }
+    return nullptr;
+}
 
 void *record_node::operator new(size_t s)
 {

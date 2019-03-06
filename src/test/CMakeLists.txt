@@ -29,6 +29,7 @@ add_executable(${ATHDNS_GTEST_BIN_NAME}
   ${ATHDNS_TEST_DIR}/dns_test.cpp
   ${ATHDNS_TEST_DIR}/utils_test.cpp
   ${ATHDNS_TEST_DIR}/hash_test.cpp
+  ${ATHDNS_TEST_DIR}/server_test.cpp
   ${ATHDNS_TEST_DIR}/dns_record_test.cpp)
 
 add_dependencies(${ATHDNS_GTEST_BIN_NAME} gtest)

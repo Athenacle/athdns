@@ -34,6 +34,8 @@ namespace objects
         dns::DnsPacket *pack;
 
         request(const uv_buf_t *, ssize_t, const sockaddr *);
+        request(dns::DnsPacket *);
+
         ~request();
     };
 

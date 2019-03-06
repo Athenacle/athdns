@@ -33,7 +33,48 @@ global_server* global_server::server_instance = nullptr;
 
 //////////////////////////////////////////////////////////////////////
 
-void global_server::cleanup()
+ip_address* global_server::sync_internal_query_A(const char* domain)
+{
+    auto node = table->get(domain);
+    if (node != nullptr) {
+        auto a = node->get_record_A();
+        if (a != nullptr) {
+            auto ret = new ip_address(*a);
+            return ret;
+        }
+    }
+    internal_barrier = new pthread_barrier_t;
+    pthread_barrier_init(internal_barrier, nullptr, 2);
+    dns_package_builder builder;
+    dns_package_builder::basic_query_package(builder, domain);
+    DnsPacket* pack = builder.build();
+    pack->parse();
+    request* req = new request(pack);
+    uv_buf_t* buf = new_uv_buf_t();
+    buf->base = reinterpret_cast<char*>(pack->get_data());
+    buf->len = pack->get_size();
+    req->buf = buf;
+    request_pointer pointer(req);
+    forward_item* item = new forward_item(pack, pointer);
+    forward_item_submit(item);
+    pthread_barrier_wait(internal_barrier);
+    pthread_barrier_destroy(internal_barrier);
+    delete internal_barrier;
+    internal_barrier = nullptr;
+
+    node = table->get(domain);
+    if (node != nullptr) {
+        auto a = node->get_record_A();
+        if (a != nullptr) {
+            TRACE("internal DNS Query: {0} -> {1}", domain, *a);
+            return a;
+        }
+    }
+    return nullptr;
+}
+
+
+void global_server::cleanup(uv_timer_t*)
 {
     int c = 0;
     for (auto& ns : remote_address) {
@@ -327,7 +368,10 @@ void global_server::forward_item_submit(forward_item* item)
 {
     increase_forward();
     item->forward_id = forward_id++;
-    *reinterpret_cast<uint16_t*>(item->req->buf->base) = item->forward_id;
+    if (unlikely(item->req->buf != nullptr)) {
+        *reinterpret_cast<uint16_t*>(item->req->buf->base) = item->forward_id;
+    }
+
     forward_item_pointer pointer(item);
 
     pthread_spin_lock(&forward_table_lock);
@@ -388,8 +432,14 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
         record_node* node = pack->generate_record_node();
         cache_add_node(node);
         delete pack;
-        forward_response* resp = new forward_response(pointer, buf);
-        send_response(resp);
+        if (likely(pointer->req->sock != nullptr)) {
+            forward_response* resp = new forward_response(pointer, buf);
+            send_response(resp);
+        } else {
+            utils::free_buffer(buf->base);
+            delete_uv_buf_t(buf);
+            pthread_barrier_wait(internal_barrier);
+        }
     }
 }
 

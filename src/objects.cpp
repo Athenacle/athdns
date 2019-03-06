@@ -38,6 +38,13 @@ response::response(const request_pointer& p) : req(p) {}
 response::~response() {}
 
 // request
+request::request(dns::DnsPacket* pack)
+{
+    this->pack = pack;
+    this->buf = nullptr;
+    this->sock = nullptr;
+}
+
 request::request(const uv_buf_t* buffer, ssize_t size, const sockaddr* addr) : nsize(size)
 {
     buf = global_server::get_server().new_uv_buf_t();
@@ -48,9 +55,11 @@ request::request(const uv_buf_t* buffer, ssize_t size, const sockaddr* addr) : n
 
 request::~request()
 {
-    utils::free_buffer(buf->base);
+    if (likely(sock != nullptr)) {
+        utils::free_buffer(buf->base);
+        utils::destroy(sock);
+    }
     global_server::get_server().delete_uv_buf_t(buf);
-    utils::destroy(sock);
 }
 
 // forward response
@@ -65,7 +74,9 @@ forward_response::~forward_response()
 forward_item::forward_item(DnsPacket* packet, const request_pointer& rp) : req(rp), pack(packet)
 {
     response_send = false;
-    origin_id = *reinterpret_cast<uint16_t*>(rp->buf->base);
+    if (unlikely(rp->buf != nullptr)) {
+        origin_id = *reinterpret_cast<uint16_t*>(rp->buf->base);
+    }
     pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE);
 }
 
