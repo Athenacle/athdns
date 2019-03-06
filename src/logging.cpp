@@ -88,8 +88,11 @@ namespace logging
     {
         auto level = ::logging::level::debug;
         switch (ll) {
-            case utils::LL_TRACE:
+            case utils::LL_DEBUG:
                 level = ::logging::level::debug;
+                break;
+            case utils::LL_TRACE:
+                level = ::logging::level::trace;
                 break;
             case utils::LL_ERROR:
                 level = ::logging::level::error;

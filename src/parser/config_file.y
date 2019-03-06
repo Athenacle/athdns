@@ -14,7 +14,7 @@
 %token KW_LOG KW_LOG_FILE KW_DEFAULT_TTL
 %token KW_RE_QUERY KW_SERVER KW_REPORT_TIMEOUT
 %token KW_ON KW_OFF
-%token KW_LOG_TRACE KW_LOG_ERROR KW_LOG_WARNING KW_LOG_INFO
+%token KW_LOG_TRACE KW_LOG_ERROR KW_LOG_WARNING KW_LOG_INFO KW_LOG_DEBUG
 
 %token <number> NUMBER
 %token <text> IP
@@ -64,6 +64,7 @@ log_line
       | KW_LOG KW_LOG_WARNING NEWLINE             { config_set_log_level(LOG_WARNING); }
       | KW_LOG KW_LOG_ERROR NEWLINE               { config_set_log_level(LOG_ERROR); }
       | KW_LOG KW_LOG_INFO NEWLINE                { config_set_log_level(LOG_INFO); }
+      | KW_LOG KW_LOG_DEBUG NEWLINE               { config_set_log_level(LOG_DEBUG); }
       | KW_LOG KW_OFF NEWLINE                     { config_set_log_level(LOG_OFF); }
 
 log_file_line

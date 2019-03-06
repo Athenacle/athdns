@@ -50,6 +50,7 @@ void config_set_report_timeout(int);
 #define LOG_WARNING (0xf2)
 #define LOG_ERROR (0xf3)
 #define LOG_INFO (0xf4)
+#define LOG_DEBUG (0xf5)
 #define LOG_OFF (VALUE_OFF)
 
 #endif

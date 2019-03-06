@@ -87,8 +87,9 @@ namespace utils
         LL_ERROR = 1,
         LL_WARNING = 2,
         LL_INFO = 3,
-        LL_TRACE = 4,
-        LL_OFF = 5
+        LL_DEBUG = 4,
+        LL_TRACE = 5,
+        LL_OFF = 6
     };
 
     template <class T, class _>

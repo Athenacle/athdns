@@ -32,6 +32,7 @@ DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
 "server"                                            { return KW_SERVER; }
 
 
+"DEBUG"                                             { return KW_LOG_DEBUG; }
 "TRACE"                                             { return KW_LOG_TRACE; }
 "ERROR"                                             { return KW_LOG_ERROR; }
 "WARNING"                                           { return KW_LOG_WARNING; }

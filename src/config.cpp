@@ -140,7 +140,9 @@ void config_set_log_level(int ll)
         case LOG_OFF:
             level = utils::LL_OFF;
             break;
-
+        case LOG_DEBUG:
+            level = utils::LL_DEBUG;
+            break;
         case LOG_TRACE:
             level = utils::LL_TRACE;
             break;
