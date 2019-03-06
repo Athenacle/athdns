@@ -328,6 +328,8 @@ namespace dns
         reference set_answer_record(record_node *);
 
         DnsPacket *build();
+
+        static void basic_query_package(reference, const char *);
     };
 
 

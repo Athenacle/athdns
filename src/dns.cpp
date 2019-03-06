@@ -502,5 +502,10 @@ namespace dns
         return *this;
     }
 
+    void dns_package_builder::basic_query_package(reference ref, const char* domain)
+    {
+        ref.as_query().set_opcode(DNS_OPCODE_STAND_QUERY).set_RD().set_resp_RA();
+        ref.set_query(domain).set_id(utils::rand_value());
+    }
 
 }  // namespace dns
