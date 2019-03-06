@@ -31,7 +31,7 @@ namespace
     case level::__level:      \
         return #__level;
 
-    inline constexpr char* level_string(level l)
+    inline constexpr const char* level_string(level l)
     {
         switch (l) {
             LEVEL_STRING(none)
@@ -53,7 +53,7 @@ namespace
     case level::__level:              \
         return __color;
 
-    inline constexpr char* color_dispatch(level l)
+    inline constexpr const char* color_dispatch(level l)
     {
         switch (l) {
             LEVEL_COLOR(none, "\e[39m")

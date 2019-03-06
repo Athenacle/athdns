@@ -152,8 +152,8 @@ TEST(utils, bit_container)
 TEST(utils, base64Encode)
 {
     struct pair {
-        char *base;
-        char *base64;
+        const char *base;
+        const char *base64;
         size_t len;
     };
 
