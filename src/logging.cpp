@@ -170,6 +170,9 @@ void log_sink::write(const logging_object& obj)
     } else {
         wrote += w;
     }
+    if (obj.l == level::fatal) {
+        exit(-1);
+    }
 }
 
 logging_object::logging_object(level lv, const string& message) : msg(message), l(lv)
