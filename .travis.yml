@@ -6,11 +6,11 @@ compiler:
 addons:
   apt:
     update: true
-    packages: libuv1-dev bison flex lcov libmbedtls-dev libssl-dev
+    packages: libuv1-dev bison flex lcov libmbedtls-dev libssl-dev nodejs npm
 script: 
   - scripts/build.sh
 after_success:
-  - scripts/upload.sh
+  - scripts/upload.bash
 branches:
   only:
     - master

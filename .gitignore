@@ -2,3 +2,6 @@ build/
 DNS.sln
 compile_commands.json
 config.h
+
+.ccls-cache/
+.vscode/
