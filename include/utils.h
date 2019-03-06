@@ -25,6 +25,24 @@
 
 namespace utils
 {
+    long read_rss();
+    bool check_uv_return_status(int, const char *);
+
+    void init_buffer_pool(size_t);
+    char *get_buffer();
+    void free_buffer(char *);
+    void destroy_buffer();
+#ifndef NDEBUG
+    size_t get_max_buffer_allocate();
+#endif
+
+    void config_system(int, CH *const[]);
+
+    void split(std::vector<string> &, const CH *, const CH);
+
+    char *encode_base64(const void *, size_t);
+    char *encode_base64(const char *);
+
     template <class T>
     T *str_allocate(size_t count)
     {
@@ -230,12 +248,6 @@ namespace utils
             delete[] old_buffer;
         }
     };
-
-    long read_rss();
-    bool check_uv_return_status(int, const char *);
-
-    char *encode_base64(const void *, size_t);
-    char *encode_base64(const char *);
 
     template <class T, unsigned int N = 1>
     class allocator_pool

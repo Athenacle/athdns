@@ -19,8 +19,11 @@
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+
 #include <cstring>
 #include <ctime>
+#include <functional>
+#include <utility>
 
 using namespace hash;
 using namespace dns;
@@ -91,18 +94,30 @@ void global_server::init_server_loop()
         INFO("bind success on {0}:{1}", default_address, default_port);
     }
 
-    status = uv_async_init(uv_main_loop, async_works, [](uv_async_t* work) {
+    static const auto& async_work_stop_loop = [](uv_async_t* work) {
         auto server = reinterpret_cast<global_server*>(work->data);
+        static const auto& stop_cb = [](uv_handle_t* t, void*) { uv_close(t, nullptr); };
+
         uv_timer_stop(&server->cleanup_timer);
         uv_udp_recv_stop(&server->server_udp);
         uv_timer_stop(&server->timer);
         uv_stop(server->uv_main_loop);
-        uv_walk(server->uv_main_loop, [](uv_handle_t* t, void*) { uv_close(t, nullptr); }, nullptr);
-    });
+        uv_walk(server->uv_main_loop, stop_cb, nullptr);
+    };
 
-    status = uv_async_init(uv_main_loop, sending_response_works, [](uv_async_t*) {
-        auto& queue = global_server::get_server().response_sending_queue;
-        auto lock = global_server::get_server().response_sending_queue_lock;
+    static const auto& async_work_sending_response_cb = [](uv_async_t*) {
+        static auto& queue = global_server::get_server().response_sending_queue;
+        static auto lock = global_server::get_server().response_sending_queue_lock;
+        static auto udp = &global_server::get_server().server_udp;
+
+        static const auto& send_complete_cb = [](uv_udp_send_t* send, int flag) {
+            auto item = reinterpret_cast<found_response*>(send->data);
+            if (unlikely(flag != 0)) {
+                WARN("sending failed: {0}", uv_strerror(flag));
+            }
+            delete item;
+            global_server::get_server().delete_uv_udp_send_t(send);
+        };
 
         pthread_mutex_lock(lock);
         while (queue.size() > 0) {
@@ -110,21 +125,20 @@ void global_server::init_server_loop()
             queue.pop();
             auto send = global_server::get_server().new_uv_udp_send_t();
             send->data = item;
-            uv_udp_send(send,
-                        &global_server::get_server().server_udp,
-                        item->get_buffer(),
-                        1,
-                        item->get_sock(),
-                        [](uv_udp_send_t* send, int) {
-                            auto item = reinterpret_cast<found_response*>(send->data);
-                            delete item;
-                            global_server::get_server().delete_uv_udp_send_t(send);
-                        });
+            auto buf = item->get_buffer();
+            auto sock = item->get_sock();
+            uv_udp_send(send, udp, buf, 1, sock, send_complete_cb);
         }
         pthread_mutex_unlock(lock);
-    });
+    };
 
+    status = uv_async_init(uv_main_loop, async_works, async_work_stop_loop);
+    utils::check_uv_return_status(status, "init async stop");
+
+    status = uv_async_init(uv_main_loop, sending_response_works, async_work_sending_response_cb);
+    utils::check_uv_return_status(status, "init async send");
     uv_timer_init(uv_main_loop, &current_time_timer);
+    utils::check_uv_return_status(status, "current_timer");
 }
 
 void global_server::set_static_ip(const string& domain, uint32_t ip)
@@ -162,50 +176,55 @@ void global_server::init_server()
     } else {
         for (size_t i = 0; i < remote_address.size(); i++) {
             remote_address[i]->set_index(i);
-            remote_address[i]->start_remote();
         }
     }
-    int reportt = timer_timeout * 1000;
-    uv_timer_start(&timer,
-                   [](uv_timer_t*) {
-                       static auto& server = global_server::get_server();
-                       int forward = server.get_total_forward_cound();
-                       int total = server.get_total_request();
-                       auto hit = total - forward;
-                       double percent = 0;
-                       if (likely(total != 0)) {
-                           percent = (hit * 1.0) / total * 100;
-                       }
+    current_time_timer.data = &current_time;
+}
 
-                       INFO(
-                           "report: requests {0}, hit {1}, rate {2:.2f}% "
-                           "forward {3}, saved {4}, memory {5} KB ",
-                           total,
-                           total - forward,
-                           percent,
-                           forward,
-                           server.get_hashtable_size(),
-                           utils::read_rss());
-                   },
-                   reportt,
-                   reportt);
-    uv_timer_start(&cleanup_timer, uvcb_timer_cleaner, 10 * 1000, 10 * 1000);
-    uv_udp_recv_start(&server_udp, uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
+void global_server::start_server()
+{
+    for (auto& ns : remote_address) {
+        ns->start_remote();
+    }
 
-    const auto& timer_func = [](uv_timer_t* p) {
+    static const auto& cleaner = std::bind(&global_server::cleanup, this, std::placeholders::_1);
+
+    static const auto& current_time_timer_func = [](uv_timer_t* p) {
         static auto ct = reinterpret_cast<utils::atomic_number<time_t>*>(p->data);
         static utils::atomic_int count(0);
-        if (count++ % 600 == 0) {
+        if (unlikely(count++ % 600 == 0)) {
             ct->reset(time(nullptr));
         } else {
             ct->operator++();
         }
     };
-    current_time_timer.data = &current_time;
-    current_time.reset(time(nullptr));
-    uv_timer_start(&current_time_timer, timer_func, 1000, 1000);
-}
+    static const auto& report_func = [](uv_timer_t*) {
+        static auto& server = global_server::get_server();
+        int forward = server.get_total_forward_cound();
+        int total = server.get_total_request();
+        auto hit = total - forward;
+        double percent = 0;
+        if (likely(total != 0)) {
+            percent = (hit * 1.0) / total * 100;
+        }
+        INFO(
+            "report: requests {0}, hit {1}, rate {2:.2f}% "
+            "forward {3}, saved {4}, memory {5} KB ",
+            total,
+            total - forward,
+            percent,
+            forward,
+            server.get_hashtable_size(),
+            utils::read_rss());
+    };
+    int reportt = timer_timeout * 1000;
 
+    uv_timer_start(&cleanup_timer, [](uv_timer_t* t) { cleaner(t); }, 10 * 1000, 10 * 1000);
+    uv_timer_start(&timer, report_func, reportt, reportt);
+    uv_timer_start(&current_time_timer, current_time_timer_func, 1000, 1000);
+    uv_udp_recv_start(&server_udp, uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
+    uv_run(uv_main_loop, UV_RUN_DEFAULT);
+}
 
 global_server::~global_server()
 {
@@ -267,9 +286,12 @@ global_server::global_server()
 void global_server::do_stop()
 {
     INFO("stopping server.");
-    DTRACE("uv_buf_t allocator max allocated {0},  uv_udp_send_t allocator max allocated {1}",
-           uv_buf_t_pool.get_max_allocated(),
-           uv_udp_send_t_pool.get_max_allocated());
+    DTRACE(
+        "uv_buf_t allocator max allocated {0},  uv_udp_send_t allocator max allocated {1}, char* "
+        "buffer max allocated {2}",
+        uv_buf_t_pool.get_max_allocated(),
+        uv_udp_send_t_pool.get_max_allocated(),
+        utils::get_max_buffer_allocate());
     uv_async_send(async_works);
     for (auto& ns : remote_address) {
         ns->stop_remote();

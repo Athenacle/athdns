@@ -38,8 +38,6 @@ void uvcb_async_response_send(uv_async_t *);
 
 void uvcb_async_remote_response_send(uv_async_t *);
 
-void uvcb_timer_cleaner(uv_timer_t *);
-
 class global_server
 {
     friend void delete_timer_worker(uv_timer_t *);
@@ -126,6 +124,12 @@ public:                                           \
     ADD_ALLOCATOR_POOL(uv_udp_send_t)
 
 #undef ADD_ALLOCATOR_POOL
+
+private:
+    void cleanup(uv_timer_t *);
+
+    void init_server_loop();
+
 
 public:
     void send_response(objects::response *);
@@ -248,20 +252,13 @@ public:
         return remote_address;
     }
 
-    void init_server_loop();
-
     void init_server();
 
-    void start_server_loop()
-    {
-        uv_run(uv_main_loop, UV_RUN_DEFAULT);
-    }
+    void start_server();
 
     void do_stop();
 
     void response_from_remote(uv_buf_t *, remote_nameserver *);
-
-    void cleanup();
 
     void cache_add_node(record_node *);
 
@@ -269,6 +266,8 @@ public:
     {
         return current_time;
     }
+
+    ip_address *sync_internal_query_A(char *);
 };
 
 

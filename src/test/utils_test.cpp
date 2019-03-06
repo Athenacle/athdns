@@ -169,5 +169,6 @@ TEST(utils, base64Encode)
         EXPECT_STREQ(res2, p.base64) << p.base;
         EXPECT_STREQ(res, p.base64) << p.base;
         utils::strfree(res);
+        utils::strfree(res2);
     }
 }

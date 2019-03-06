@@ -76,6 +76,7 @@ namespace utils
         auto ret = utils::str_allocate<char>(len + 1);
         memcpy(ret, mem_buf->data, len);
         ret[len] = 0;
+        BUF_MEM_free(mem_buf);
         return ret;
 #elif defined HAVE_MBEDTLS
         size_t dest_len = 1.5 * length + 5;
@@ -91,6 +92,18 @@ namespace utils
         }
 #endif
     }
+
+#ifndef NDEBUG
+    size_t get_max_buffer_allocate()
+    {
+        auto pool = *get_pool();
+        if (pool != nullptr) {
+            return pool->get_max_allocated();
+        } else {
+            return 0;
+        }
+    }
+#endif
 
     char *get_buffer()
     {

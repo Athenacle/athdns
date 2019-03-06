@@ -30,7 +30,7 @@ int main(int argc, CH* const argv[])
     auto& server = global_server::get_server();
 
     server.init_server();
-    server.start_server_loop();
+    server.start_server();
 
     global_server::destroy_server();
     utils::destroy_buffer();
