@@ -72,13 +72,21 @@
 
 include(CMakeParseArguments)
 
+
 if (${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+  # on Gentoo based systems, gcov will looks like gcov-8.2.0
   set(GCOV_VERSION ${CMAKE_CXX_COMPILER_VERSION})
   string(APPEND GCOV_VERSION_NAME  "gcov-" ${CMAKE_CXX_COMPILER_VERSION})
+
+  # on other systems, gcov will looks like gcov-8
+  string(REPLACE "." ";" VERSION_LIST ${CMAKE_CXX_COMPILER_VERSION})
+  list(GET VERSION_LIST 0 CXX_COMPILER_VERSION_MAJOR)
+  string(APPEND GCOV_VERSION_MAJOR_NAME "gcov-" ${CXX_COMPILER_VERSION_MAJOR})
+
 endif()
 
 # Check prereqs
-find_program( GCOV_PATH ${GCOV_NAME} ${GCOV_VERSION_NAME})
+find_program( GCOV_PATH NAMES ${GCOV_NAME} ${GCOV_VERSION_MAJOR_NAME} ${GCOV_VERSION_NAME} gcov)
 find_program( LCOV_PATH  NAMES lcov lcov.bat lcov.exe lcov.perl)
 find_program( GENHTML_PATH NAMES genhtml genhtml.perl genhtml.bat )
 find_program( GCOVR_PATH gcovr PATHS ${CMAKE_SOURCE_DIR}/scripts/test)
