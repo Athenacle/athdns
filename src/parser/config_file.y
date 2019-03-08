@@ -10,11 +10,12 @@
   char* text;
 };
 
-%token KW_NAMESERVER KW_PARALLEL_QUERY KW_CACHE_COUNT
+%token KW_NAMESERVER KW_PARALLEL_QUERY KW_CACHE_COUNT KW_LISTEN
 %token KW_LOG KW_LOG_FILE KW_DEFAULT_TTL
 %token KW_RE_QUERY KW_SERVER KW_REPORT_TIMEOUT
 %token KW_ON KW_OFF
 %token KW_LOG_TRACE KW_LOG_ERROR KW_LOG_WARNING KW_LOG_INFO KW_LOG_DEBUG
+%token COLON
 
 %token <number> NUMBER
 %token <text> IP
@@ -43,6 +44,11 @@ conf_line
       | static_server
       | report_line
       | NEWLINE
+      | listen_line
+
+listen_line
+      : KW_LISTEN IP NEWLINE                      { config_listen_at($2, 53); free($2);}
+      | KW_LISTEN IP COLON NUMBER NEWLINE         { config_listen_at($2, $4); free($2);}
 
 report_line
       : KW_REPORT_TIMEOUT NUMBER NEWLINE          { config_set_report_timeout($2); }

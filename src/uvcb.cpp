@@ -25,7 +25,7 @@ void uvcb_server_incoming_alloc(uv_handle_t*, size_t, uv_buf_t* buf)
 }
 
 void uvcb_server_incoming_recv(
-    uv_udp_t*, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr, unsigned int flag)
+    uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr, unsigned int flag)
 {
     static auto loop = global_server::get_server().get_main_loop();
 
@@ -53,7 +53,7 @@ void uvcb_server_incoming_recv(
         return;
     }
 
-    auto req = new objects::request(buf, nread, addr);
+    auto req = new objects::request(buf, nread, addr, udp);
 
     uv_work_t* work = new uv_work_t;
     work->data = req;

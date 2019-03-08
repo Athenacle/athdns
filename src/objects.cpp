@@ -45,12 +45,14 @@ request::request(dns::DnsPacket* pack)
     this->sock = nullptr;
 }
 
-request::request(const uv_buf_t* buffer, ssize_t size, const sockaddr* addr) : nsize(size)
+request::request(const uv_buf_t* buffer, ssize_t size, const sockaddr* addr, uv_udp_t* u)
+    : nsize(size)
 {
     buf = global_server::get_server().new_uv_buf_t();
     buf->len = size;
     buf->base = buffer->base;
     sock = utils::make(addr);
+    udp = u;
 }
 
 request::~request()

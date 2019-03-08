@@ -111,7 +111,6 @@ void global_server::set_log_file(const CH* path)
 
 void global_server::init_server_loop()
 {
-    struct sockaddr_in addr;
     uv_main_loop = uv_default_loop();
 
     auto status = uv_timer_init(uv_main_loop, &timer);
@@ -119,21 +118,33 @@ void global_server::init_server_loop()
     status = uv_timer_init(uv_main_loop, &cleanup_timer);
     utils::check_uv_return_status(status, "timer cleaner init");
 
-    status = uv_udp_init(uv_main_loop, &server_udp);
+    if (listen_address.size() == 0) {
+        listen_address.emplace_back(
+            std::make_tuple(utils::strdup("0.0.0.0"), 53, nullptr, nullptr));
+    }
 
-    utils::check_uv_return_status(status, "uv init");
+    for (auto& listen : listen_address) {
+        sockaddr_in* addr = new sockaddr_in;
+        uv_udp_t* udp = new uv_udp_t;
 
-    const int default_port = 53535;
-    const auto default_address = "0.0.0.0";
+        status = uv_udp_init(uv_main_loop, udp);
+        utils::check_uv_return_status(status, "uv init");
 
-    status = uv_ip4_addr(default_address, default_port, &addr);
-    utils::check_uv_return_status(status, "uv set ipv4 addr");
+        const char* address = std::get<0>(listen);
+        const uint16_t port = std::get<1>(listen);
+        status = uv_ip4_addr(address, port, addr);
+        utils::check_uv_return_status(status, "uv set ipv4 addr");
 
-    status = uv_udp_bind(&server_udp, reinterpret_cast<struct sockaddr*>(&addr), UV_UDP_REUSEADDR);
-    utils::check_uv_return_status(status, "bind");
+        sockaddr* sock = reinterpret_cast<sockaddr*>(addr);
+        status = uv_udp_bind(udp, sock, UV_UDP_REUSEADDR);
+        if (likely(status == 0)) {
+            INFO("bind success on {0}:{1}", address, port);
+        } else {
+            FATAL("bind failed on {0}:{1}. {2}", address, port, uv_strerror(status));
+        }
 
-    if (likely(status == 0)) {
-        INFO("bind success on {0}:{1}", default_address, default_port);
+        auto p = std::make_tuple(address, port, sock, udp);
+        listen.swap(p);
     }
 
     static const auto& async_work_stop_loop = [](uv_async_t* work) {
@@ -141,7 +152,10 @@ void global_server::init_server_loop()
         static const auto& stop_cb = [](uv_handle_t* t, void*) { uv_close(t, nullptr); };
 
         uv_timer_stop(&server->cleanup_timer);
-        uv_udp_recv_stop(&server->server_udp);
+        for (auto& listen : server->listen_address) {
+            uv_udp_recv_stop(std::get<3>(listen));
+        }
+
         uv_timer_stop(&server->timer);
         uv_stop(server->uv_main_loop);
         uv_walk(server->uv_main_loop, stop_cb, nullptr);
@@ -150,7 +164,6 @@ void global_server::init_server_loop()
     static const auto& async_work_sending_response_cb = [](uv_async_t*) {
         static auto& queue = global_server::get_server().response_sending_queue;
         static auto lock = global_server::get_server().response_sending_queue_lock;
-        static auto udp = &global_server::get_server().server_udp;
 
         static const auto& send_complete_cb = [](uv_udp_send_t* send, int flag) {
             auto item = reinterpret_cast<found_response*>(send->data);
@@ -166,6 +179,7 @@ void global_server::init_server_loop()
             auto item = queue.front();
             queue.pop();
             auto send = global_server::get_server().new_uv_udp_send_t();
+            auto udp = item->get_request()->udp;
             send->data = item;
             auto buf = item->get_buffer();
             auto sock = item->get_sock();
@@ -264,7 +278,11 @@ void global_server::start_server()
     uv_timer_start(&cleanup_timer, [](uv_timer_t* t) { cleaner(t); }, 10 * 1000, 10 * 1000);
     uv_timer_start(&timer, report_func, reportt, reportt);
     uv_timer_start(&current_time_timer, current_time_timer_func, 1000, 1000);
-    uv_udp_recv_start(&server_udp, uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
+    for (auto& listen : listen_address) {
+        uv_udp_recv_start(
+            std::get<3>(listen), uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
+    }
+
     uv_run(uv_main_loop, UV_RUN_DEFAULT);
 }
 
@@ -283,6 +301,12 @@ global_server::~global_server()
     for (auto& ns : remote_address) {
         delete ns;
     }
+    for (auto& listen : listen_address) {
+        utils::strfree(std::get<0>(listen));
+        delete std::get<2>(listen);
+        delete std::get<3>(listen);
+    }
+
     pthread_spin_lock(&forward_table_lock);
     forward_table.clear();
     pthread_spin_unlock(&forward_table_lock);
@@ -296,7 +320,6 @@ global_server::~global_server()
 
 global_server::global_server()
     : forward_id(utils::rand_value() & 0xffff),
-      server_udp(),
       queue_lock(),
       queue_sem(),
       sending_lock(PTHREAD_MUTEX_INITIALIZER),
@@ -329,7 +352,8 @@ void global_server::do_stop()
 {
     INFO("stopping server.");
     DTRACE(
-        "uv_buf_t allocator max allocated {0},  uv_udp_send_t allocator max allocated {1}, char* "
+        "uv_buf_t allocator max allocated {0},  uv_udp_send_t allocator max allocated {1}, "
+        "char* "
         "buffer max allocated {2}",
         uv_buf_t_pool.get_max_allocated(),
         uv_udp_send_t_pool.get_max_allocated(),
@@ -449,4 +473,9 @@ void global_server::cache_add_node(record_node* node)
     if (table != nullptr) {
         table->put(node);
     }
+}
+
+void global_server::config_listen_at(const char* ip, uint16_t port)
+{
+    listen_address.emplace_back(std::make_tuple(ip, port, nullptr, nullptr));
 }

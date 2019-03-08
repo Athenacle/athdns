@@ -22,6 +22,8 @@ DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
 
 {DOMAIN}                                            {yylval.text =strdup(yytext); return DOMAIN; }
 
+":"                                                 { return COLON; }
+"listen"                                            { return KW_LISTEN; }
 "nameserver"                                        { return KW_NAMESERVER; }
 "parallel-query"                                    { return KW_PARALLEL_QUERY; }
 "cache-count"                                       { return KW_CACHE_COUNT; }

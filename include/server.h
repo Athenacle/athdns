@@ -49,6 +49,8 @@ class global_server
     using static_address_type = std::tuple<string, uint32_t>;
     using queue_item = std::tuple<uv_buf_t *, const sockaddr *, ssize_t>;
 
+    std::vector<std::tuple<const char *, uint16_t, sockaddr *, uv_udp_t *>> listen_address;
+
     std::vector<remote_nameserver *> remote_address;
     std::vector<static_address_type> *static_address;
 
@@ -76,7 +78,6 @@ class global_server
     bool parallel_query;
 
     uv_loop_t *uv_main_loop;
-    uv_udp_t server_udp;
     uv_async_t *async_works;
     uv_async_t *sending_response_works;
 
@@ -141,11 +142,6 @@ public:
     }
 
     void forward_item_submit(objects::forward_item *);
-
-    uv_udp_t *get_server_udp()
-    {
-        return &server_udp;
-    }
 
     void send(objects::send_object *);
 
@@ -269,6 +265,8 @@ public:
     }
 
     ip_address *sync_internal_query_A(const char *);
+
+    void config_listen_at(const char *, uint16_t);
 };
 
 
