@@ -73,13 +73,12 @@
 include(CMakeParseArguments)
 
 if (${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
-  string(APPEND GCOV_NAME "gcov-" ${CMAKE_CXX_COMPILER_VERSION})
-else()
-  set(GCOV_NAME "gcov")
+  set(GCOV_VERSION ${CMAKE_CXX_COMPILER_VERSION})
+  string(APPEND GCOV_VERSION_NAME  "gcov-" ${CMAKE_CXX_COMPILER_VERSION})
 endif()
 
 # Check prereqs
-find_program( GCOV_PATH ${GCOV_NAME})
+find_program( GCOV_PATH ${GCOV_NAME} ${GCOV_VERSION_NAME})
 find_program( LCOV_PATH  NAMES lcov lcov.bat lcov.exe lcov.perl)
 find_program( GENHTML_PATH NAMES genhtml genhtml.perl genhtml.bat )
 find_program( GCOVR_PATH gcovr PATHS ${CMAKE_SOURCE_DIR}/scripts/test)
