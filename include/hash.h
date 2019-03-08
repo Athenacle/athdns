@@ -94,7 +94,7 @@ namespace hash
         using const_reference = const record_type &;
 
         using container_type =
-            std::unordered_map<domain_name, record_node *, unordered_map_hash, unordered_map_equal>;
+            std::unordered_map<domain_name, hash_node *, unordered_map_hash, unordered_map_equal>;
 
         using container_pointer = container_type *;
         using container_reference = container_type &;
@@ -104,8 +104,8 @@ namespace hash
     private:
         container_type container;
 
-        pointer lru_head;
-        pointer lru_end;
+        hash_node *lru_head;
+        hash_node *lru_end;
 
         size_type total_size;
         size_type hash_size;

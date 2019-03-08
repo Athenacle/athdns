@@ -62,16 +62,15 @@ public:
     }
 };
 
+class hash_node;
+
 class record_node
 {
+    friend class hash_node;
     friend class dns_package_builder;
     friend class hash::hashtable;
 
     domain_name name;
-
-    record_node *lru_next;
-    record_node *lru_prev;
-
     uint32_t record_ttl;
 
     reply_type type;
@@ -194,6 +193,43 @@ public:
     virtual void to_string(string &) const override;
     domain_name get_actual_name() const;
 };
+
+class hash_node
+{
+    friend class hash::hashtable;
+
+    record_node *value;
+    hash_node *lru_next;
+    hash_node *lru_prev;
+
+    hash_node(record_node *p) : value(p)
+    {
+        lru_next = lru_prev = nullptr;
+    }
+
+    ~hash_node()
+    {
+        delete value;
+    }
+
+    record_node *operator->()
+    {
+        return value;
+    }
+
+    operator record_node *()
+    {
+        return value;
+    }
+
+    record_node *get_node()
+    {
+        return value;
+    }
+
+    void swap_A();
+};
+
 
 namespace fmt
 {

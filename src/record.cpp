@@ -77,7 +77,7 @@ record_node::~record_node()
 
 record_node::record_node(uint8_t *buffer, uint8_t *begin, const char *domain)
 {
-    lru_next = lru_prev = node_next = nullptr;
+    node_next = nullptr;
 
     uint16_t *p = reinterpret_cast<uint16_t *>(begin);
 
@@ -142,7 +142,7 @@ record_node::record_node(domain_name n)
         name = utils::strdup(n);
     }
 
-    node_next = lru_prev = lru_next = nullptr;
+    node_next = nullptr;
     set_value();
 }
 
@@ -312,4 +312,75 @@ domain_name record_node_CNAME::get_actual_name() const
 const uint8_t *record_node_CNAME::get_value() const
 {
     return value;
+}
+
+void hash_node::swap_A()
+{
+    if (value->node_next == nullptr) {
+        return;
+    }
+
+    if (value->record_type == DNS_TYPE_A) {
+        record_node *last_prev = value;
+        while (last_prev->node_next != nullptr) {
+            assert(last_prev->record_type == DNS_TYPE_A);
+            if (last_prev->node_next->node_next == nullptr) {
+                break;
+            }
+            last_prev = last_prev->node_next;
+        }
+        assert(last_prev->record_type == DNS_TYPE_A);
+        assert(last_prev->node_next->node_next == nullptr);
+        // this condition looks like
+        //      node  ==>  A   ->  A  ->  A  ->  A  ->  A
+        //                                       |
+        //                                     last_prev
+        auto old = last_prev->node_next;
+        old->node_next = value;
+        last_prev->node_next = nullptr;
+        value = old;
+    } else {
+        auto node = value;
+
+        while (node->node_next != nullptr) {
+            if (node->node_next->record_type == DNS_TYPE_A) {
+                break;
+            }
+            node = node->node_next;
+        }
+        if (node->node_next != nullptr) {
+            assert(node->node_next->record_type == DNS_TYPE_A);
+            assert(node->record_type != DNS_TYPE_A);
+            if (node->node_next->node_next != nullptr) {
+                record_node *last = node->node_next;
+                while (last->node_next != nullptr) {
+                    assert(last->record_type == DNS_TYPE_A);
+                    if (last->node_next->node_next == nullptr) {
+                        break;
+                    }
+                    last = last->node_next;
+                }
+                assert(last->node_next != nullptr);
+                assert(last->node_next->record_type == DNS_TYPE_A);
+                // this condition looks like
+                //       value  ==> CNAME   ->  CNAME   ->   A   ->   A   ->  A
+                //                                |                   |
+                //                               node                last
+                auto old = last->node_next;
+                old->node_next = node->node_next;
+                node->node_next = old;
+                last->node_next = nullptr;
+            }
+            // else ==> node->node_next->node_next == nullptr ==>
+            // this condition looks like
+            //       value  ==>   CNAME  ->  CNAME  ->   A
+            //                                 |
+            //                               node
+        }
+        // else ==> node->node_next == nullptr  ==>
+        //  this condition looks like
+        //       value ==>  CNAME  ->  CNAME  ->  CNAME  -> CNAME
+        //                                                    |
+        //                                                   node
+    }
 }

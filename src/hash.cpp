@@ -79,25 +79,25 @@ namespace hash
         pthread_rwlock_rdlock(&table_rwlock);
         auto iter = entry.find(new_pointer->get_name());
         pthread_rwlock_unlock(&table_rwlock);
+        hash_node *nn = new hash_node(new_pointer);
         if (iter != entry.end()) {
             delete new_pointer;
             return;
         } else {
             pthread_rwlock_wrlock(&table_rwlock);
-            entry.insert({new_pointer->get_name(), new_pointer});
+            entry.insert({new_pointer->get_name(), nn});
+
             pthread_rwlock_unlock(&table_rwlock);
         }
 
         pthread_spin_lock(&lru_lock);
         if (unlikely(lru_head == nullptr)) {
             assert(lru_end == nullptr);
-            lru_head = lru_end = new_pointer;
-            new_pointer->lru_next = new_pointer->lru_prev = nullptr;
+            lru_head = lru_end = nn;
         } else {
-            new_pointer->lru_prev = nullptr;
-            new_pointer->lru_next = lru_head;
-            lru_head->lru_prev = new_pointer;
-            lru_head = new_pointer;
+            nn->lru_next = lru_head;
+            lru_head->lru_prev = nn;
+            lru_head = nn;
         }
         pthread_spin_unlock(&lru_lock);
         saved++;
@@ -112,10 +112,10 @@ namespace hash
             pthread_spin_unlock(&lru_lock);
 
             pthread_rwlock_wrlock(&table_rwlock);
-            entry.erase(old_end->get_name());
+            entry.erase(old_end->get_node()->get_name());
             pthread_rwlock_unlock(&table_rwlock);
 
-            DTRACE("LRU: remove old item {0}", *old_end);
+            DTRACE("LRU: remove old item {0}", *old_end->get_node());
             delete old_end;
         }
     }
@@ -132,7 +132,7 @@ namespace hash
         auto pos = entry.find(name);
         pthread_rwlock_unlock(&table_rwlock);
         if (pos != entry.end()) {
-            record_node *ret = std::get<1>(*pos);
+            hash_node *ret = std::get<1>(*pos);
             assert(lru_head != nullptr);
             pthread_spin_lock(&lru_lock);
             lru_head->lru_prev = ret;
@@ -147,7 +147,8 @@ namespace hash
             lru_head = ret;
             lru_end->lru_next = nullptr;
             pthread_spin_unlock(&lru_lock);
-            return ret;
+            ret->swap_A();
+            return ret->get_node();
         } else {
             return nullptr;
         }
@@ -179,7 +180,7 @@ namespace hash
 
     record_node *hashtable::get_last() const
     {
-        return lru_head;
+        return lru_head->get_node();
     }
 
 
