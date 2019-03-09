@@ -86,7 +86,7 @@ namespace hash
         } else {
             pthread_rwlock_wrlock(&table_rwlock);
             entry.insert({new_pointer->get_name(), nn});
-
+            saved++;
             pthread_rwlock_unlock(&table_rwlock);
         }
 
@@ -100,7 +100,6 @@ namespace hash
             lru_head = nn;
         }
         pthread_spin_unlock(&lru_lock);
-        saved++;
         if (saved > total_size) {
             pthread_spin_lock(&lru_lock);
             assert(lru_end != nullptr);
@@ -108,11 +107,11 @@ namespace hash
             auto old_end = lru_end;
             new_end->lru_next = nullptr;
             lru_end = new_end;
-            saved--;
             pthread_spin_unlock(&lru_lock);
 
             pthread_rwlock_wrlock(&table_rwlock);
             entry.erase(old_end->get_node()->get_name());
+            saved--;
             pthread_rwlock_unlock(&table_rwlock);
 
             DTRACE("LRU: remove old item {0}", *old_end->get_node());
@@ -133,8 +132,8 @@ namespace hash
         pthread_rwlock_unlock(&table_rwlock);
         if (pos != entry.end()) {
             hash_node *ret = std::get<1>(*pos);
-            assert(lru_head != nullptr);
             pthread_spin_lock(&lru_lock);
+            assert(lru_head != nullptr);
             lru_head->lru_prev = ret;
             if (ret->lru_prev != nullptr) {
                 ret->lru_prev->lru_next = ret->lru_next;
