@@ -170,6 +170,26 @@ namespace remote
         udp_nameserver(udp_nameserver &&) = delete;
         udp_nameserver(const udp_nameserver &) = delete;
     };
+
+    class doh_nameserver : public abstract_nameserver
+    {
+        const char *url;
+
+    protected:
+        virtual void implement_do_startup() override;
+        virtual void implement_stop_cb() override;
+
+    public:
+        doh_nameserver(const char *u);
+        virtual ~doh_nameserver();
+
+        virtual void send(objects::send_object *) override;
+
+        virtual void init_remote() override;
+
+        virtual void destroy_remote() override;
+    };
+
 }  // namespace remote
 
 namespace fmt

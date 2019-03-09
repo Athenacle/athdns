@@ -223,3 +223,42 @@ void udp_nameserver::implement_do_startup()
     init_remote();
     pthread_create(get_thread(), nullptr, thread_func, this);
 }
+
+#ifdef HAVE_DOH_SUPPORT
+
+doh_nameserver::doh_nameserver(const char* u)
+{
+    url = utils::strdup(u);
+}
+
+doh_nameserver::~doh_nameserver()
+{
+    utils::strfree(url);
+}
+
+void doh_nameserver::implement_do_startup()
+{
+    //TODO: implement this
+}
+
+void doh_nameserver::implement_stop_cb()
+{
+    //TODO: implement this
+}
+
+void doh_nameserver::send(objects::send_object*)
+{
+    //TODO: implement this
+}
+
+void doh_nameserver::init_remote()
+{
+    //TODO: implement this
+}
+
+void doh_nameserver::destroy_remote()
+{
+    //TODO: implement this
+}
+
+#endif

@@ -39,6 +39,7 @@ void config_set_default_ttl(int);
 void config_set_requery(int);
 void config_set_report_timeout(int);
 void config_listen_at(const char*, long long);
+void config_add_doh_nameserver(const char*);
 
 #ifdef __cplusplus
 }

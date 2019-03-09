@@ -5,6 +5,8 @@ IP_ADDRESS {IP_PART}\.{IP_PART}\.{IP_PART}\.{IP_PART}
 WS [ \t\s\a\r]
 TEXT [a-zA-Z0-9/]+
 DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
+URL_PART \/[a-zA-Z0-9\-_]+
+URL {DOMAIN}{URL_PART}*
 
 %{
 #include "config_file.h"
@@ -21,6 +23,7 @@ DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
 #.*\n                                               { return COMMENT; }
 
 {DOMAIN}                                            {yylval.text =strdup(yytext); return DOMAIN; }
+{URL}                                               {yylval.text =strdup(yytext); return URL; }
 
 ":"                                                 { return COLON; }
 "listen"                                            { return KW_LISTEN; }

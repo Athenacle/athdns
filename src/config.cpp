@@ -206,3 +206,13 @@ void config_listen_at(const char* ip, long long port)
         FATAL("invalid listen address {0}", ip);
     }
 }
+
+void config_add_doh_nameserver(const char* url)
+{
+#ifdef HAVE_DOH_SUPPORT
+    global_server::get_server().add_doh_nameserver(url);
+    INFO("add DoH nameserver {0}", url);
+#else
+    ERROR("build without DoH support, remote DoH support is disabled, skip remote {0}", url);
+#endif
+}

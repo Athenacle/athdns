@@ -265,6 +265,10 @@ public:
     ip_address *sync_internal_query_A(const char *);
 
     void config_listen_at(const char *, uint16_t);
+
+#ifdef HAVE_DOH_SUPPORT
+    void add_doh_nameserver(const char *);
+#endif
 };
 
 

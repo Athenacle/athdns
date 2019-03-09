@@ -464,3 +464,11 @@ void global_server::config_listen_at(const char* ip, uint16_t port)
 {
     listen_address.emplace_back(std::make_tuple(ip, port, nullptr, nullptr));
 }
+
+#ifdef HAVE_DOH_SUPPORT
+void global_server::add_doh_nameserver(const char* url)
+{
+    remote::doh_nameserver* ns = new remote::doh_nameserver(url);
+    remote_address.emplace_back(ns);
+}
+#endif
