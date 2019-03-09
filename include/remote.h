@@ -35,6 +35,8 @@ namespace remote
         utils::atomic_int request_forward_count;
         utils::atomic_int response_count;
 
+        void set_socket(const ip_address &, uint16_t);
+
         uv_loop_t *get_loop() const
         {
             return loop;

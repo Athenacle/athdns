@@ -30,6 +30,7 @@ abstract_nameserver::abstract_nameserver(uint32_t __remote_ip, int __remote_port
 {
     remote_address.reset(__remote_ip);
     remote_port = __remote_port;
+    init_socket();
 }
 
 abstract_nameserver::abstract_nameserver()
@@ -105,6 +106,13 @@ bool abstract_nameserver::find_erase(uint16_t id)
 void abstract_nameserver::destroy_nameserver()
 {
     uv_loop_close(loop);
+}
+
+void abstract_nameserver::set_socket(const ip_address& ip, uint16_t port)
+{
+    remote_address = ip;
+    remote_port = port;
+    init_socket();
 }
 
 void abstract_nameserver::start_remote()
@@ -184,7 +192,6 @@ void udp_nameserver::init_remote()
         pthread_mutex_unlock(sending_obj->sending_queue_mutex);
     };
 
-    init_socket();
     auto l = get_loop();
     uv_async_init(l, async_send, send_cb);
     uv_udp_init(l, udp_handler);
