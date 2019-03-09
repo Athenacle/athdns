@@ -86,14 +86,7 @@ void global_server::cleanup(uv_timer_t*)
 
 void global_server::add_remote_address(uint32_t ip)
 {
-    for (auto& ns : remote_address) {
-        if (*ns == ip) {
-            //TODO nameserver exists. Here should have a warning
-            INFO("exists.");
-            return;
-        }
-    }
-    remote_nameserver* ns = new remote_nameserver(ip);
+    remote::udp_nameserver* ns = new remote::udp_nameserver(ip);
     remote_address.emplace_back(ns);
 }
 
@@ -376,16 +369,11 @@ void global_server::forward_item_all(forward_item_pointer& item)
         obj->bufs = item->req->buf;
         obj->bufs_count = 1;
         obj->sock = reinterpret_cast<sockaddr*>(ns->get_sock());
-
-#ifdef DTRACE_OUTPUT
-        string ns_string;
-        ns->to_string(ns_string);
-        DTRACE("OUT request {0} -> {1}", item->pack->getQuery().getName(), ns_string);
-#endif
-
         ns->send(obj);
         ns->increase_forward();
         ns->insert_sending({item->forward_id, item});
+
+        DTRACE("OUT request {0} -> {1}", item->pack->getQuery().getName(), *ns);
     }
 }
 
@@ -419,7 +407,7 @@ void global_server::send_response(response* resp)
     uv_async_send(sending_response_works);
 }
 
-void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
+void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameserver* ns)
 {
     uint16_t* p = reinterpret_cast<uint16_t*>(buf->base);
     uint16_t forward_id = *p;
@@ -427,14 +415,11 @@ void global_server::response_from_remote(uv_buf_t* buf, remote_nameserver* ns)
 #ifdef DTRACE_OUTPUT
     DnsPacket* dpack = DnsPacket::fromDataBuffer(buf);
     dpack->parse();
-    string ns_string;
-    ns->to_string(ns_string);
     string node_string;
     record_node* node = dpack->generate_record_node();
     if (node != nullptr) {
         node->to_string(node_string);
-        DTRACE(
-            "IN response from {0}: {1}->{2}", ns_string, dpack->getQuery().getName(), node_string);
+        DTRACE("IN response from {0}: {1}->{2}", *ns, dpack->getQuery().getName(), node_string);
         delete node;
     }
     delete dpack;

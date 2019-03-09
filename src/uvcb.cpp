@@ -115,7 +115,7 @@ void uvcb_remote_udp_recv(
         }
         utils::free_buffer(buf->base);
     } else {
-        auto ns = reinterpret_cast<remote_nameserver*>(udp->data);
+        auto ns = reinterpret_cast<remote::udp_nameserver*>(udp->data);
         uv_buf_t* nbuf = global_server::get_server().new_uv_buf_t();
         nbuf->base = buf->base;
         nbuf->len = nread;

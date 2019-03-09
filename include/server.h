@@ -28,8 +28,6 @@
 #include <queue>
 #include <unordered_map>
 
-using remote::remote_nameserver;
-
 void uvcb_incoming_request_worker(uv_work_t *);
 
 void uvcb_incoming_request_response_send_complete(uv_udp_send_t *, int);
@@ -51,7 +49,7 @@ class global_server
 
     std::vector<std::tuple<const char *, uint16_t, sockaddr *, uv_udp_t *>> listen_address;
 
-    std::vector<remote_nameserver *> remote_address;
+    std::vector<remote::abstract_nameserver *> remote_address;
     std::vector<static_address_type> *static_address;
 
     std::unordered_map<uint16_t, objects::forward_item_pointer> forward_table;
@@ -244,7 +242,7 @@ public:
 
     void set_server_log_level(utils::log_level);
 
-    const std::vector<remote_nameserver *> &get_remote_server() const
+    const std::vector<remote::abstract_nameserver *> &get_remote_server() const
     {
         return remote_address;
     }
@@ -255,7 +253,7 @@ public:
 
     void do_stop();
 
-    void response_from_remote(uv_buf_t *, remote_nameserver *);
+    void response_from_remote(uv_buf_t *, remote::abstract_nameserver *);
 
     void cache_add_node(record_node *);
 
