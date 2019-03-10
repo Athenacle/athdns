@@ -130,6 +130,8 @@ private:
 
     void init_server_loop();
 
+    void destroy_ssl_libraries();
+    void init_ssl_libraries();
 
 public:
     void send_response(objects::response *);

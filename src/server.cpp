@@ -25,6 +25,12 @@
 #include <functional>
 #include <utility>
 
+#ifdef HAVE_DOH_SUPPORT
+#ifdef HAVE_OPENSSL
+#include <openssl/ssl.h>
+#endif
+#endif
+
 using namespace hash;
 using namespace dns;
 using namespace objects;
@@ -228,6 +234,9 @@ void global_server::init_server()
         }
     }
     current_time_timer.data = &current_time;
+#ifdef HAVE_DOH_SUPPORT
+    init_ssl_libraries();
+#endif
 }
 
 void global_server::start_server()
@@ -472,3 +481,22 @@ void global_server::add_doh_nameserver(const char* url)
     remote_address.emplace_back(ns);
 }
 #endif
+
+void global_server::init_ssl_libraries()
+{
+#ifdef HAVE_DOH_SUPPORT
+#ifdef HAVE_OPENSSL
+    SSL_library_init();
+    SSL_load_error_strings();
+#else
+#endif
+#endif
+}
+
+void global_server::destroy_ssl_libraries()
+{
+#ifdef HAVE_DOH_SUPPORT
+#ifdef HAVE_OPENSSL
+#endif
+#endif
+}

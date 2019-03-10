@@ -22,9 +22,9 @@
 #define ENABLE_TESTING "@ATHDNS_ENABLE_TESTING@"
 
 //BUILD SYSTEM
-#cmakedefine ATHDNS_BUILD_ON_UNIX
+#cmakedefine ON_UNIX
 
-#cmakedefine ATHDNS_BUILD_ON_WINDOWS
+#cmakedefine ON_WINDOWS
 
 //INCULUDE FILE
 
