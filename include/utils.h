@@ -40,8 +40,10 @@ namespace utils
 
     void split(std::vector<string> &, const CH *, const CH);
 
+#ifdef HAVE_DOH_SUPPORT
     char *encode_base64(const void *, size_t);
     char *encode_base64(const char *);
+#endif
 
     template <class T>
     T *str_allocate(size_t count)

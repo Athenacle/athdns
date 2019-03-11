@@ -50,6 +50,7 @@ namespace
 
 namespace utils
 {
+#ifdef HAVE_DOH_SUPPORT
     char *encode_base64(const char *buf)
     {
         return encode_base64(buf, utils::strlen(buf));
@@ -92,6 +93,7 @@ namespace utils
         }
 #endif
     }
+#endif
 
 #ifndef NDEBUG
     size_t get_max_buffer_allocate()
