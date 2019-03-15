@@ -353,13 +353,20 @@ global_server::global_server()
 void global_server::do_stop()
 {
     INFO("stopping server.");
+#ifndef ATHDNS_MEM_DEBUG
     DTRACE(
         "uv_buf_t allocator max allocated {0},  uv_udp_send_t allocator max allocated {1}, "
-        "char* "
-        "buffer max allocated {2}",
+        "char* buffer max allocated {2}",
         uv_buf_t_pool.get_max_allocated(),
         uv_udp_send_t_pool.get_max_allocated(),
         utils::get_max_buffer_allocate());
+    DTRACE(
+        "uv_buf_t now allocated {0}, uv_udp_send_t now allocated {1},"
+        " char buffer now allocated {2}",
+        uv_buf_t_pool.get_current_allocated(),
+        uv_udp_send_t_pool.get_current_allocated(),
+        utils::get_current_buffer_allocate());
+#endif
     uv_async_send(async_works);
     for (auto& ns : remote_address) {
         ns->stop_remote();

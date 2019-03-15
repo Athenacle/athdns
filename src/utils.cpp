@@ -107,6 +107,12 @@ namespace utils
     }
 #endif
 
+    size_t get_current_buffer_allocate()
+    {
+        static auto pool = *get_pool();
+        return pool->get_current_allocated();
+    }
+
     char *get_buffer()
     {
         static auto pool = *get_pool();
