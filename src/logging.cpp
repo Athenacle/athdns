@@ -20,8 +20,7 @@
 
 using namespace logging;
 
-pthread_spinlock_t* logging::logger::instance_lock = nullptr;
-logger* logger::instance = nullptr;
+logger* logging::__log = nullptr;
 
 namespace
 {
@@ -79,7 +78,7 @@ namespace logging
 {
     void destroy_logger()
     {
-        logger::get_logger().stop();
+        __log->stop();
         logger::destroy();
     }
 
@@ -110,13 +109,13 @@ namespace logging
                 level = ::logging::level::info;
                 break;
         }
-        logger::get_logger().set_level(level);
+        __log->set_level(level);
     }
 
     void init_logging()
     {
         logger::init_logger();
-        logger::get_logger().start();
+        __log->start();
     }
 
 }  // namespace logging
@@ -175,7 +174,7 @@ void log_sink::write(const logging_object& obj)
     }
 }
 
-logging_object::logging_object(level lv, const string& message) : msg(message), l(lv)
+logging_object::logging_object(level lv, string&& message) : msg(message), l(lv)
 {
 #ifdef GETTIMEOFDAY
     gettimeofday(&t, nullptr);
@@ -186,70 +185,51 @@ logging_object::logging_object(level lv, const string& message) : msg(message), 
 
 void logger::init_logger()
 {
-    instance_lock = new pthread_spinlock_t;
-    pthread_spin_init(instance_lock, PTHREAD_PROCESS_PRIVATE);
-    logger::instance = new logger;
+    logging::__log = new logger;
     int stdout = dup2(STDOUT_FILENO, new_stdout_fileno);
-    instance->sinks->emplace_back(new_stdout_fileno);
+    __log->sinks->emplace_back(new_stdout_fileno);
 }
 
 void logger::destroy()
 {
-    pthread_spin_destroy(instance_lock);
-    delete instance_lock;
-    delete logger::instance;
+    delete logging::__log;
 }
 
 logger::~logger()
 {
-    pthread_spin_destroy(queue_lock);
+    pthread_mutex_destroy(mutex);
+    pthread_cond_destroy(cond);
     delete sinks;
-    delete queue_lock;
-    sem_destroy(sem);
-    delete sem;
+    delete mutex;
+    delete cond;
     delete working_thread;
     delete queue;
 }
 
 logger::logger()
 {
-    queue_lock = new pthread_spinlock_t;
+    cond = new pthread_cond_t;
+    mutex = new pthread_mutex_t;
     sinks = new std::vector<log_sink>;
     queue = new std::queue<logging_object*>;
-    sem = new sem_t;
     working_thread = new pthread_t;
-    pthread_spin_init(queue_lock, PTHREAD_PROCESS_PRIVATE);
-    sem_init(sem, PTHREAD_PROCESS_PRIVATE, 0);
+    pthread_mutex_init(mutex, nullptr);
     logging_level = level::info;
+    pthread_cond_init(cond, nullptr);
 }
 
 void logger::stop()
 {
-    pthread_spin_lock(queue_lock);
+    pthread_mutex_lock(mutex);
     queue->emplace(nullptr);
-    pthread_spin_unlock(queue_lock);
-    sem_post(sem);
-
+    pthread_cond_signal(cond);
+    pthread_mutex_unlock(mutex);
     pthread_join(*working_thread, nullptr);
 }
 
-
 void logger::start()
 {
-    pthread_create(logger::instance->working_thread, nullptr, logging_thread, nullptr);
-}
-
-logger& logger::get_logger()
-{
-    //////////////////////////////////////////
-    // pthread_spin_lock(instance_lock);    //
-    // if (unlikely(instance == nullptr)) { //
-    //     init_logger();                   //
-    // }                                    //
-    // auto& ret = *instance;               //
-    // pthread_spin_unlock(instance_lock);  //
-    //////////////////////////////////////////
-    return *instance;
+    pthread_create(__log->working_thread, nullptr, logging_thread, nullptr);
 }
 
 void logger::set_level(level l)
@@ -257,31 +237,34 @@ void logger::set_level(level l)
     logging_level = l;
 }
 
-void logger::write(level l, const string& msg)
+void logger::write(level l, string&& msg)
 {
-    auto lo = new logging_object(l, msg);
-    pthread_spin_lock(queue_lock);
+    auto lo = new logging_object(l, std::move(msg));
+    pthread_mutex_lock(mutex);
     queue->emplace(lo);
-    pthread_spin_unlock(queue_lock);
-    sem_post(sem);
+    pthread_cond_signal(cond);
+    pthread_mutex_unlock(mutex);
 }
 
 void* logging_thread(void*)
 {
-    static auto& instance = logger::get_logger();
+    static auto instance = logging::__log;
     while (true) {
-        sem_wait(instance.sem);
-        pthread_spin_lock(instance.queue_lock);
-        auto data = instance.queue->front();
-        instance.queue->pop();
-        pthread_spin_unlock(instance.queue_lock);
+        pthread_mutex_lock(instance->mutex);
+        while (instance->queue->size() == 0) {
+            pthread_cond_wait(instance->cond, instance->mutex);
+        }
+        auto data = instance->queue->front();
+        instance->queue->pop();
         if (unlikely(data != nullptr)) {
-            for (auto& sink : *instance.sinks) {
+            for (auto& sink : *instance->sinks) {
                 sink.write(*data);
             }
             delete data;
         } else {
+            pthread_mutex_unlock(instance->mutex);
             return nullptr;
         }
+        pthread_mutex_unlock(instance->mutex);
     }
 }

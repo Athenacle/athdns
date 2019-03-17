@@ -72,7 +72,7 @@ namespace logging
 #else
         time_t t;
 #endif
-        logging_object(level, const string&);
+        logging_object(level, string&&);
 
         operator const char*() const
         {
@@ -100,17 +100,14 @@ namespace logging
         level logging_level;
         pthread_t* working_thread;
         std::vector<log_sink>* sinks;
-        sem_t* sem;
         std::queue<logging_object*>* queue;
-        pthread_spinlock_t* sink_lock;
-        pthread_spinlock_t* queue_lock;
+
+        pthread_cond_t* cond;
+        pthread_mutex_t* mutex;
 
     private:
         logger();
         ~logger();
-
-        static logger* instance;
-        static pthread_spinlock_t* instance_lock;
 
     public:
         level get_log_level() const
@@ -118,13 +115,11 @@ namespace logging
             return logging_level;
         }
 
-        static logger& get_logger();
-
         static void init_logger();
 
         void start();
 
-        void write(level, const string&);
+        void write(level, string&&);
 
         void set_level(level);
 
@@ -135,22 +130,23 @@ namespace logging
 
     void destroy_logger();
 
+    extern logger* __log;
 
     inline level get_default_level()
     {
-        return logger::get_logger().get_log_level();
+        return __log->get_log_level();
     }
 
-#define LOGGING_FUNCTION(__level)                          \
-    template <class... Args>                               \
-    void __level(const char* __fmt, const Args&... __args) \
-    {                                                      \
-        static auto& worker = logger::get_logger();        \
-        static auto lv = worker.get_log_level();           \
-        if (level::__level <= lv) {                        \
-            string msg = fmt::format(__fmt, __args...);    \
-            worker.write(level::__level, msg);             \
-        }                                                  \
+#define LOGGING_FUNCTION(__level)                                 \
+    template <class... Args>                                      \
+    inline void __level(const char* __fmt, const Args&... __args) \
+    {                                                             \
+        auto worker = __log;                                      \
+        auto lv = worker->get_log_level();                        \
+        if (level::__level <= lv) {                               \
+            string msg = fmt::format(__fmt, __args...);           \
+            worker->write(level::__level, std::move(msg));        \
+        }                                                         \
     }
 
     LOGGING_FUNCTION(fatal)
