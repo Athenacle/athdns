@@ -32,8 +32,8 @@
 
 #ifndef NDEBUG
 #define DTRACE_OUTPUT
-#define DTRACE(format, ...) logging::debug_trace(format, __VA_ARGS__)
-#define DDEBUG(format, ...) logging::debug_trace(format, __VA_ARGS__)
+#define DTRACE(...) logging::debug_trace(__VA_ARGS__)
+#define DDEBUG(...) logging::debug_trace(__VA_ARGS__)
 #else
 #undef DTRACE_OUTPUT
 #define DDEBUG(format, ...)
