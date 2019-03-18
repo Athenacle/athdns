@@ -58,6 +58,9 @@ set(SSL_LIB)
 
 if(${ATHDNS_ENABLE_DOH})
   set(HAVE_DOH_SUPPORT ON)
+  include(FindNgHttp2)
+  include_directories(${NGHTTP2_INCLUDE_DIR})
+  list(APPEND SSL_LIB ${NGHTTP2_LIBRARY})
   if (${ATHDNS_USE_OPENSSL})
     include(FindOpenSSL)
     if (NOT ${OpenSSL_FOUND})
@@ -110,6 +113,12 @@ set(ATHDNS_LIB_SRC
   src/remote.cpp
   src/uvcb.cpp
   src/utils.cpp)
+
+if(${ATHDNS_ENABLE_DOH})
+  list(APPEND ATHDNS_LIB_SRC
+    src/doh.cpp
+    src/ssl.cpp)
+endif()
 
 include(FindFLEX)
 include(FindBISON)
