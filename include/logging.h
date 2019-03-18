@@ -14,6 +14,8 @@
 #define LOGGING_H
 
 #include "athdns.h"
+#include "utils.h"
+
 #include "fmt/core.h"
 
 #ifdef GETTIMEOFDAY
@@ -74,6 +76,8 @@ namespace logging
 #endif
         logging_object(level, string&&);
 
+        logging_object() {}
+
         operator const char*() const
         {
             return msg.c_str();
@@ -105,6 +109,8 @@ namespace logging
         pthread_cond_t* cond;
         pthread_mutex_t* mutex;
 
+        utils::allocator_pool<logging_object>* pool;
+
     private:
         logger();
         ~logger();
@@ -126,6 +132,16 @@ namespace logging
         void stop();
 
         static void destroy();
+
+        logging_object* new_logging_object(level l, string&& msg)
+        {
+            return pool->allocate(l, std::move(msg));
+        }
+
+        void delete_logging_object(logging_object* obj)
+        {
+            pool->deallocate(obj);
+        }
     };
 
     void destroy_logger();

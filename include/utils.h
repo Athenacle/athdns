@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <cstring>  // memset
+#include <functional>
 #include <queue>
 #include <type_traits>  // std::enable_if_t
 #include <unordered_map>
@@ -287,6 +288,7 @@ namespace utils
             } else {
                 for (size_t i = os; i < s; ++i) {
                     auto nv = reinterpret_cast<pointer>(malloc(N * sizeof(value_type)));
+                    new (nv) value_type();
                     empty_queue.emplace(nv);
                     pool_map.insert({nv, __entry_map()});
                 }
@@ -350,13 +352,13 @@ namespace utils
         }
 
         template <unsigned int _N = N, class... Args>
-        std::enable_if_t<(_N == 1), pointer> allocate(const Args &... __args)
+        std::enable_if_t<(_N == 1), pointer> allocate(Args... __args)
         {
 #ifndef NDEBUG
             allocated_count++;
 #endif
             pointer ret = get_pointer();
-            new (ret) value_type(__args...);
+            new (ret) value_type(std::forward<Args>(__args)...);
             return ret;
         }
 
@@ -379,6 +381,16 @@ namespace utils
             return max_allocated;
         }
 #endif
+        void for_each(std::function<void(const pointer)> cb)
+        {
+            lock();
+            auto begin = pool_map.begin();
+            auto end = pool_map.end();
+            for (; begin != end; ++begin) {
+                cb(begin->first);
+            }
+            unlock();
+        }
     };
 
 }  // namespace utils

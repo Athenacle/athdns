@@ -199,6 +199,7 @@ logger::~logger()
 {
     pthread_mutex_destroy(mutex);
     pthread_cond_destroy(cond);
+    delete pool;
     delete sinks;
     delete mutex;
     delete cond;
@@ -216,6 +217,7 @@ logger::logger()
     pthread_mutex_init(mutex, nullptr);
     logging_level = level::info;
     pthread_cond_init(cond, nullptr);
+    pool = new utils::allocator_pool<logging_object>(10);
 }
 
 void logger::stop()
@@ -229,7 +231,11 @@ void logger::stop()
 
 void logger::start()
 {
-    pthread_create(__log->working_thread, nullptr, logging_thread, nullptr);
+    pool->for_each([](logging_object* obj) {
+        obj->msg = "";
+        obj->msg.reserve(30);
+    });
+    pthread_create(working_thread, nullptr, logging_thread, nullptr);
 }
 
 void logger::set_level(level l)
@@ -239,7 +245,7 @@ void logger::set_level(level l)
 
 void logger::write(level l, string&& msg)
 {
-    auto lo = new logging_object(l, std::move(msg));
+    auto lo = new_logging_object(l, std::move(msg));
     pthread_mutex_lock(mutex);
     queue->emplace(lo);
     pthread_cond_signal(cond);
@@ -260,7 +266,7 @@ void* logging_thread(void*)
             for (auto& sink : *instance->sinks) {
                 sink.write(*data);
             }
-            delete data;
+            instance->delete_logging_object(data);
         } else {
             pthread_mutex_unlock(instance->mutex);
             return nullptr;
