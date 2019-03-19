@@ -25,6 +25,13 @@
 #include <functional>
 #include <utility>
 
+#ifdef HAVE_DOH_SUPPORT
+#include "doh.h"
+#ifdef HAVE_OPENSSL
+#include <openssl/ssl.h>
+#endif
+#endif
+
 using namespace hash;
 using namespace dns;
 using namespace objects;
@@ -228,6 +235,9 @@ void global_server::init_server()
         }
     }
     current_time_timer.data = &current_time;
+#ifdef HAVE_DOH_SUPPORT
+    init_ssl_libraries();
+#endif
 }
 
 void global_server::start_server()
@@ -344,13 +354,20 @@ global_server::global_server()
 void global_server::do_stop()
 {
     INFO("stopping server.");
+#ifndef ATHDNS_MEM_DEBUG
     DTRACE(
         "uv_buf_t allocator max allocated {0},  uv_udp_send_t allocator max allocated {1}, "
-        "char* "
-        "buffer max allocated {2}",
+        "char* buffer max allocated {2}",
         uv_buf_t_pool.get_max_allocated(),
         uv_udp_send_t_pool.get_max_allocated(),
         utils::get_max_buffer_allocate());
+    DTRACE(
+        "uv_buf_t now allocated {0}, uv_udp_send_t now allocated {1},"
+        " char buffer now allocated {2}",
+        uv_buf_t_pool.get_current_allocated(),
+        uv_udp_send_t_pool.get_current_allocated(),
+        utils::get_current_buffer_allocate());
+#endif
     uv_async_send(async_works);
     for (auto& ns : remote_address) {
         ns->stop_remote();
@@ -463,4 +480,31 @@ void global_server::cache_add_node(record_node* node)
 void global_server::config_listen_at(const char* ip, uint16_t port)
 {
     listen_address.emplace_back(std::make_tuple(ip, port, nullptr, nullptr));
+}
+
+#ifdef HAVE_DOH_SUPPORT
+void global_server::add_doh_nameserver(const char* url)
+{
+    remote::doh_nameserver* ns = new remote::doh_nameserver(url);
+    remote_address.emplace_back(ns);
+}
+#endif
+
+void global_server::init_ssl_libraries()
+{
+#ifdef HAVE_DOH_SUPPORT
+#ifdef HAVE_OPENSSL
+    SSL_library_init();
+    SSL_load_error_strings();
+#else
+#endif
+#endif
+}
+
+void global_server::destroy_ssl_libraries()
+{
+#ifdef HAVE_DOH_SUPPORT
+#ifdef HAVE_OPENSSL
+#endif
+#endif
 }

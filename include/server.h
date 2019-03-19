@@ -130,6 +130,8 @@ private:
 
     void init_server_loop();
 
+    void destroy_ssl_libraries();
+    void init_ssl_libraries();
 
 public:
     void send_response(objects::response *);
@@ -265,6 +267,10 @@ public:
     ip_address *sync_internal_query_A(const char *);
 
     void config_listen_at(const char *, uint16_t);
+
+#ifdef HAVE_DOH_SUPPORT
+    void add_doh_nameserver(const char *);
+#endif
 };
 
 

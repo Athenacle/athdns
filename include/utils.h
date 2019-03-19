@@ -35,14 +35,17 @@ namespace utils
     void destroy_buffer();
 #ifndef NDEBUG
     size_t get_max_buffer_allocate();
+    size_t get_current_buffer_allocate();
 #endif
 
     void config_system(int, CH *const[]);
 
     void split(std::vector<string> &, const CH *, const CH);
 
+#ifdef HAVE_DOH_SUPPORT
     char *encode_base64(const void *, size_t);
     char *encode_base64(const char *);
+#endif
 
     template <class T>
     T *str_allocate(size_t count)
@@ -258,6 +261,7 @@ namespace utils
         using value_type = T;
         using pointer = T *;
 
+#ifndef ATHDNS_MEM_DEBUG
     private:
         struct __entry_map {
             bool used;
@@ -375,6 +379,14 @@ namespace utils
             free_pointer(p);
         }
 
+        size_t get_current_allocated() const
+        {
+            lock();
+            auto ret = pool_map.size() - empty_queue.size();
+            unlock();
+            return ret;
+        }
+
 #ifndef NDEBUG
         int get_max_allocated()
         {
@@ -391,9 +403,51 @@ namespace utils
             }
             unlock();
         }
-    };
 
+#else
+    public:
+        allocator_pool(int) {}
+
+        ~allocator_pool() {}
+
+        template <unsigned int _N = N, class... Args>
+        std::enable_if_t<(_N >= 2), pointer> allocate() const
+        {
+            return new value_type[N];
+        }
+
+        template <unsigned int _N = N, class... Args>
+        std::enable_if_t<(_N == 1), pointer> allocate(const Args &... __args) const
+        {
+            return new value_type(__args...);
+        }
+
+        template <unsigned int _N = N>
+        void deallocate(std::enable_if_t<_N == 1, pointer> p) const
+        {
+            delete p;
+        }
+
+        template <unsigned int _N = N>
+        void deallocate(std::enable_if_t<_N >= 2, pointer> p) const
+        {
+            delete[] p;
+        }
+
+        size_t get_current_allocated() const
+        {
+            return 0;
+        }
+
+#ifndef NDEBUG
+        int get_max_allocated()
+        {
+            return 0;
+        }
+#endif  // NDEBUG
+
+#endif  // ATHDNS_MEM_DEBUG
+    };  // namespace utils
 }  // namespace utils
-
 
 #endif

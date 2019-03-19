@@ -19,21 +19,17 @@ mkdir -p "$codacy_dir"
 
 pushd "$codacy_dir" || exit -1
 
-cat >> package.json << EOF
-{
-  "dependencies": {
-    "codacy-coverage": "^3.4.0"
-  }
-}
-EOF
+curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | sudo apt-key add -
+echo "deb https://dl.yarnpkg.com/debian/ rc main" | sudo tee /etc/apt/sources.list.d/yarn.list
 
-node --version
-
-npm install
+sudo apt-get update -q
+sudo apt-get install --no-install-recommends -y yarn
 
 SHA=$(git rev-parse HEAD)
 
-node node_modules/codacy-coverage/bin/codacy-coverage.js < "$build_dir"/coverage.info \
+yarn add codacy-coverage
+
+yarn codacy-coverage < "$build_dir"/coverage.info \
      -t "$CODACY_PROJECT_TOKEN" \
      -a "$CODACY_API_TOKEN" \
      -u "Athenacle" \

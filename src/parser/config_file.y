@@ -10,7 +10,7 @@
   char* text;
 };
 
-%token KW_NAMESERVER KW_PARALLEL_QUERY KW_CACHE_COUNT KW_LISTEN
+%token KW_NAMESERVER KW_PARALLEL_QUERY KW_CACHE_COUNT KW_LISTEN KW_DOH
 %token KW_LOG KW_LOG_FILE KW_DEFAULT_TTL
 %token KW_RE_QUERY KW_SERVER KW_REPORT_TIMEOUT
 %token KW_ON KW_OFF
@@ -18,6 +18,7 @@
 %token COLON
 %token COMMENT NEWLINE
 
+%token <text> URL
 %token <number> NUMBER
 %token <text> IP
 %token <text> STRING_TEXT
@@ -26,6 +27,8 @@
 %token END 0
 
 %start conf_file
+
+%type <text> doh_part
 
 %%
 
@@ -59,6 +62,11 @@ report_line
 
 nameserver_line
       : KW_NAMESERVER IP line_end                  { config_add_nameserver($2); free($2); }
+      | KW_NAMESERVER doh_part line_end            { config_add_doh_nameserver($2); free($2); }
+
+doh_part
+      : URL KW_DOH                                 { yylval.text = $1; }
+      | KW_DOH URL                                 { yylval.text = $2; }
 
 parallel_line
       : KW_PARALLEL_QUERY KW_ON  line_end          { config_set_parallel_query(VALUE_ON); }

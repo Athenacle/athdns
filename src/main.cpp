@@ -17,15 +17,13 @@
 
 using namespace dns;
 
-void atexit_handler();
-
-
 int main(int argc, CH* const argv[])
 {
+    utils::init_buffer_pool(128);
+
     global_server::init_instance();
     logging::init_logging();
     utils::config_system(argc, argv);
-    utils::init_buffer_pool(1024);
 
     auto& server = global_server::get_server();
 

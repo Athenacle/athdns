@@ -149,6 +149,8 @@ TEST(utils, bit_container)
     }
 }
 
+#ifdef HAVE_DOH_SUPPORT
+
 TEST(utils, base64Encode)
 {
     struct pair {
@@ -172,3 +174,5 @@ TEST(utils, base64Encode)
         utils::strfree(res2);
     }
 }
+
+#endif

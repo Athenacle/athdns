@@ -14,6 +14,11 @@
 #include "logging.h"
 #include "server.h"
 
+#ifdef HAVE_MBEDTLS
+#include <mbedtls/error.h>
+#include <mbedtls/sha1.h>
+#endif
+
 using namespace remote;
 
 abstract_nameserver::~abstract_nameserver()
@@ -23,6 +28,7 @@ abstract_nameserver::~abstract_nameserver()
     delete sock;
     delete loop;
     delete stop_async;
+    delete work_thread;
 }
 
 abstract_nameserver::abstract_nameserver(uint32_t __remote_ip, int __remote_port)
@@ -30,6 +36,7 @@ abstract_nameserver::abstract_nameserver(uint32_t __remote_ip, int __remote_port
 {
     remote_address.reset(__remote_ip);
     remote_port = __remote_port;
+    init_socket();
 }
 
 abstract_nameserver::abstract_nameserver()
@@ -59,10 +66,16 @@ void abstract_nameserver::swap(abstract_nameserver& an)
 
 bool abstract_nameserver::init_socket()
 {
+    if (sock != nullptr) {
+        return true;
+    }
     sock = new sockaddr_in;
     string ip_string;
     remote_address.to_string(ip_string);
     auto ret = uv_ip4_addr(ip_string.c_str(), remote_port, sock);
+    if (ret < 0) {
+        ERROR("init_socket failed");
+    }
     return ret == 0;
 }
 
@@ -107,19 +120,29 @@ void abstract_nameserver::destroy_nameserver()
     uv_loop_close(loop);
 }
 
+void abstract_nameserver::set_socket(const ip_address& ip, uint16_t port)
+{
+    remote_address = ip;
+    remote_port = port;
+    init_socket();
+}
+
 void abstract_nameserver::start_remote()
 {
     const auto async_cb = [](uv_async_t* async) {
         abstract_nameserver* an = reinterpret_cast<abstract_nameserver*>(async->data);
-
-        static const auto& walk = [](uv_handle_t* t, void*) { uv_close(t, nullptr); };
+        static const auto& walk = [](uv_handle_t* t, void*) {
+            if (t != nullptr)
+                uv_close(t, nullptr);
+        };
         an->implement_stop_cb();
         uv_walk(an->get_loop(), walk, nullptr);
         uv_stop(an->get_loop());
+        uv_loop_close(an->get_loop());
     };
-
     uv_loop_init(loop);
     uv_async_init(loop, stop_async, async_cb);
+    stop_async->data = this;
     implement_do_startup();
 }
 
@@ -184,7 +207,6 @@ void udp_nameserver::init_remote()
         pthread_mutex_unlock(sending_obj->sending_queue_mutex);
     };
 
-    init_socket();
     auto l = get_loop();
     uv_async_init(l, async_send, send_cb);
     uv_udp_init(l, udp_handler);

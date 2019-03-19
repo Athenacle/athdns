@@ -41,12 +41,12 @@ string(TIMESTAMP ATHDNS_BUILD_TIME "%Y-%m-%d %H:%M:%SZ")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(UNIX)
-  set(ATHDNS_BUILD_ON_UNIX "Build ON UNIX" ON)
+  set(ON_UNIX "Build ON UNIX" ON)
   set(ATHDNS_BUILD_ON_WINDOWS OFF)
 else()
   if(WINDOWS)
     set(ATHDNS_BUILD_ON_UNIX OFF)
-    set(ATHDNS_BUILD_ON_WINDOWS "Build ON Windows" ON)
+    set(ON_WINDOWS "Build ON Windows" ON)
   endif()
 endif()
 
@@ -60,6 +60,8 @@ set(SSL_LIB)
 
 if(${ATHDNS_ENABLE_DOH})
   set(HAVE_DOH_SUPPORT ON)
+  include(FindNgHttp2)
+  include_directories(${NGHTTP2_INCLUDE_DIR})
   if (${ATHDNS_USE_OPENSSL})
     include(FindOpenSSL)
     if (NOT ${OpenSSL_FOUND})
@@ -67,7 +69,7 @@ if(${ATHDNS_ENABLE_DOH})
     else()
       set(HAVE_OPENSSL ON)
       include_directories(${OPENSSL_INCLUDE_DIR})
-      list(APPEND SSL_LIB ${OPENSSL_CRYPTO_LIBRARY})
+      list(APPEND SSL_LIB ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_SSL_LIBRARY})
     endif()
   else()
     if (${ATHDNS_USE_MBEDTLS})
@@ -77,7 +79,7 @@ if(${ATHDNS_ENABLE_DOH})
       else()
         set(HAVE_MBEDTLS ON)
         include_directories(${MBEDTLS_INCLUDE_DIRS})
-        list(APPEND SSL_LIB ${MBEDCRYPTO_LIBRARY})
+        list(APPEND SSL_LIB ${MBEDCRYPTO_LIBRARY} ${MBEDTLS_LIBRARY} ${MBEDX509_LIBRARY})
       endif()
     else()
       message(FATAL_ERROR "No OpenSSL or MbedTLS specified.")
@@ -142,6 +144,12 @@ set(ATHDNS_LIB_SRC
   src/remote.cpp
   src/uvcb.cpp
   src/utils.cpp)
+
+if(${ATHDNS_ENABLE_DOH})
+  list(APPEND ATHDNS_LIB_SRC
+    src/doh.cpp
+    src/ssl.cpp)
+endif()
 
 include(FindFLEX)
 include(FindBISON)
@@ -220,7 +228,13 @@ configure_file(${ATHDNS_INCLUDE_ROOT}/config.h.in
 
 add_definitions(-DHAVE_CONFIG_H)
 
-target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS} ${LIBUV_LIBRARIES} ${SSL_LIB} pthread)
+if (${ATHDNS_ENABLE_DOH})
+  target_link_libraries(${PROJECT_NAME} ${NGHTTP2_LIBRARY} ${SSL_LIB})
+endif()
+
+target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS} pthread)
+target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS} ${LIBUV_LIBRARIES})
+
 
 if (${ATHDNS_ENABLE_TESTING})
   enable_testing()

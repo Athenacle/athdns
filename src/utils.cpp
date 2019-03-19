@@ -39,17 +39,14 @@ namespace
         return std::stoi(part);
     }
 
-    utils::allocator_pool<char, recv_buffer_size> **get_pool()
-    {
-        static utils::allocator_pool<char, recv_buffer_size> *pool = nullptr;
-        return &pool;
-    }
+    utils::allocator_pool<char, recv_buffer_size> *pool = nullptr;
 
 }  // namespace
 
 
 namespace utils
 {
+#ifdef HAVE_DOH_SUPPORT
     char *encode_base64(const char *buf)
     {
         return encode_base64(buf, utils::strlen(buf));
@@ -92,11 +89,11 @@ namespace utils
         }
 #endif
     }
+#endif
 
 #ifndef NDEBUG
     size_t get_max_buffer_allocate()
     {
-        auto pool = *get_pool();
         if (pool != nullptr) {
             return pool->get_max_allocated();
         } else {
@@ -105,28 +102,30 @@ namespace utils
     }
 #endif
 
+    size_t get_current_buffer_allocate()
+    {
+        return pool->get_current_allocated();
+    }
+
     char *get_buffer()
     {
-        static auto pool = *get_pool();
         return pool->allocate();
     }
 
     void free_buffer(char *buffer)
     {
-        static auto pool = *get_pool();
         pool->deallocate(buffer);
     }
 
     void destroy_buffer()
     {
-        auto pool = *get_pool();
         delete pool;
+        pool = nullptr;
     }
 
     void init_buffer_pool(size_t buf_count)
     {
-        auto pool = get_pool();
-        *pool = new utils::allocator_pool<char, recv_buffer_size>(buf_count);
+        pool = new utils::allocator_pool<char, recv_buffer_size>(buf_count);
     }
 
     uint32_t rand_value()

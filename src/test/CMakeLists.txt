@@ -34,5 +34,8 @@ add_executable(${ATHDNS_GTEST_BIN_NAME}
 
 add_dependencies(${ATHDNS_GTEST_BIN_NAME} gtest)
 
-target_link_libraries(${ATHDNS_GTEST_BIN_NAME} libgtest ${ATHDNS_LIBS} ${LIBUV_LIBRARIES} ${SSL_LIB})
+target_link_libraries(${ATHDNS_GTEST_BIN_NAME} libgtest ${ATHDNS_LIBS} ${LIBUV_LIBRARIES})
 
+if(${ATHDNS_ENABLE_DOH})
+  target_link_libraries(${ATHDNS_GTEST_BIN_NAME} ${NGHTTP2_LIBRARY} ${SSL_LIB})
+endif()

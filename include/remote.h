@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
+
+// remote.h : DOS upstream
 
 #ifndef RSERVER_H
 #define RSERVER_H
@@ -34,6 +45,8 @@ namespace remote
         std::map<uint16_t, objects::forward_item_pointer> sending;
         utils::atomic_int request_forward_count;
         utils::atomic_int response_count;
+
+        void set_socket(const ip_address &, uint16_t);
 
         uv_loop_t *get_loop() const
         {
@@ -107,12 +120,17 @@ namespace remote
         void stop_remote();
 
         virtual void send(objects::send_object *) = 0;
-        virtual void init_remote() = 0;
+        void init_remote();
         virtual void destroy_remote() = 0;
 
         const ip_address &get_ip_address() const
         {
             return remote_address;
+        }
+
+        void single_thread_check() const
+        {
+            assert(pthread_self() == *work_thread);
         }
 
         int get_port() const
@@ -158,7 +176,7 @@ namespace remote
         void swap(const udp_nameserver &);
 
         virtual void send(objects::send_object *obj) override;
-        virtual void init_remote() override;
+        void init_remote();
         virtual void destroy_remote() override;
 
         uv_udp_t *get_udp_hander() const
