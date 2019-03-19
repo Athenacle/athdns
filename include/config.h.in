@@ -62,6 +62,10 @@
 
 #cmakedefine HAVE_BUILTIN_EXPECT
 
+#cmakedefine HAVE_TIMESPEC_TV_SEC
+
+#cmakedefine HAVE_TIMESPEC_TV_NSEC
+
 #ifdef HAVE_JEMALLOC
 #include <jemalloc/jemalloc.h>
 

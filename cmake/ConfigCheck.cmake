@@ -15,6 +15,11 @@ check_function_exists(strerror UNIX_HAVE_STRERROR)
 check_function_exists(open UNIX_HAVE_OPEN)
 check_function_exists(gettimeofday UNIX_HAVE_GETTIMEOFDAY)
 
+include(CheckStructHasMember)
+
+check_struct_has_member("struct timespec" tv_sec "time.h" HAVE_TIMESPEC_TV_SEC)
+check_struct_has_member("struct timespec" tv_nsec "time.h" HAVE_TIMESPEC_TV_NSEC)
+
 include(CheckCXXSourceCompiles)
 check_cxx_source_compiles("
 int main() {

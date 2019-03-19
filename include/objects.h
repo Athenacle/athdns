@@ -15,8 +15,10 @@
 
 #include "athdns.h"
 
-#include <arpa/inet.h>
+#include "fmt/ostream.h"
 
+#include <arpa/inet.h>
+#include <ctime>
 #include <memory>
 
 namespace objects
@@ -142,6 +144,55 @@ namespace objects
         forward_item_pointer item;
         int ns_index;
     };
+
+#ifdef CLOCK_REALTIME_COARSE
+#define ATHDNS_CLOCK_GETTIME_FLAG CLOCK_REALTIME_COARSE
+#else
+#define ATHDNS_CLOCK_GETTIME_FLAG CLOCK_REALTIME
+#endif
+
+    class time_object
+    {
+    public:
+        struct timespec t;
+
+        time_object();
+
+        ~time_object() {}
+
+        time_object(const time_object &);
+
+        void operator()();
+
+        static uint64_t diff_to_ns(const time_object &, const time_object &);
+
+        static double diff_to_us(const time_object &, const time_object &);
+
+        static double diff_to_ms(const time_object &, const time_object &);
+
+        time_object &operator=(time_object &&);
+
+        bool operator==(const time_object &) const;
+    };
 }  // namespace objects
+
+namespace fmt
+{
+    template <>
+    struct formatter<objects::time_object> {
+        template <class PC>
+        constexpr auto parse(PC &ctx)
+        {
+            return ctx.begin();
+        }
+
+        template <class T>
+        auto format(const objects::time_object &__t, T &ctx)
+        {
+            auto time_buffer = fmt::format("{:%Y-%m-%d %H:%M:%S}", __t.t.tv_sec);
+            return format_to(ctx.begin(), "{0}:{1:=06d}", time_buffer, __t.t.tv_nsec);
+        }
+    };
+}  // namespace fmt
 
 #endif
