@@ -31,19 +31,27 @@ std::vector<doh_nameserver*> doh_nameserver::doh_servers;
         ptr = #value;    \
         break;
 
-#define CLEAR_STYLE "\e[0m"
-#define BOLD_STYLE "\e[1m"
-#define COLOR_STYLE "\e[35m"
+#define CLEAR_STYLE STYLE_RESET
+#define BOLD_STYLE BUILD_COLOR(1)
+#define COLOR_STYLE BUILD_COLOR(35)
 
 namespace
 {
+    inline auto h2_http_strerror(int code)
+    {
+#if NGHTTP2_VERSION_NUM >= 0x010900lu
+        return nghttp2_http2_strerror(code);
+#else
+        return code;
+#endif
+    }
     constexpr const char* __dispatch_nghttp2_frame_type(uint8_t type)
     {
         const char* ptr = nullptr;
         switch (type) {
             TYPE_CASE(NGHTTP2_HEADERS)
             case NGHTTP2_GOAWAY:
-                ptr = "\e[1m\e[35mNGHTTP2_GOAWAY\e[0m";
+                ptr = BOLD_STYLE COLOR_STYLE "NGHTTP2_GOAWAY" CLEAR_STYLE;
                 break;
                 TYPE_CASE(NGHTTP2_DATA)
                 TYPE_CASE(NGHTTP2_PRIORITY)
@@ -52,8 +60,12 @@ namespace
                 TYPE_CASE(NGHTTP2_PING)
                 TYPE_CASE(NGHTTP2_WINDOW_UPDATE)
                 TYPE_CASE(NGHTTP2_CONTINUATION)
+#if NGHTTP2_VERSION_NUM >= 0x013000
                 TYPE_CASE(NGHTTP2_ALTSVC)
+#endif
+#if NGHTTP2_VERSION_NUM >= 0x013300
                 TYPE_CASE(NGHTTP2_ORIGIN)
+#endif
                 TYPE_CASE(NGHTTP2_SETTINGS)
         }
         return ptr;
@@ -95,7 +107,7 @@ namespace
         if (frame->hd.type == NGHTTP2_GOAWAY) {
             auto doh = to_doh(user_data);
             doh->net_error_handler(doh_nameserver::error::goaway_send);
-            DTRACE("{0} send. error {1}", ptr, nghttp2_http2_strerror(frame->goaway.error_code));
+            DTRACE("{0} send. error {1}", ptr, h2_http_strerror(frame->goaway.error_code));
         }
         return 0;
     }
@@ -103,7 +115,7 @@ namespace
     int h2cb_on_stream_close(h2s*, int32_t stream_id, uint32_t error_code, void* user_data)
     {
         DTRACE("nghttp2 stream close, error code {0}, stream id {1}",
-               nghttp2_http2_strerror(error_code),
+               h2_http_strerror(error_code),
                stream_id);
         to_doh(user_data)->h2_stream_close(stream_id);
         return 0;
@@ -215,7 +227,7 @@ namespace remote
                    frame->hd.flags == 1 ? "ACK" : " ");
         } else if (type == NGHTTP2_GOAWAY && frame->goaway.error_code != NGHTTP2_NO_ERROR) {
             doh->net_error_handler(doh_nameserver::error::goaway_recv);
-            DTRACE("{0} received: {1}", ptr, nghttp2_http2_strerror(frame->goaway.error_code));
+            DTRACE("{0} received: {1}", ptr, h2_http_strerror(frame->goaway.error_code));
         }
         return 0;
     }
