@@ -159,11 +159,11 @@ TEST(utils, base64Encode)
         size_t len;
     };
 
-    pair pairs[] = {{.base = "\n", .base64 = "Cg==", .len = 1},
-                    {.base = "12345", .base64 = "MTIzNDU=", .len = 5},
-                    {.base = "encode_base64", .base64 = "ZW5jb2RlX2Jhc2U2NA==", .len = 13},
-                    {.base = "\1\2\3\4\5", .base64 = "AQIDBAU=", .len = 5},
-                    {.base = "\1\2\3\4\5\0", .base64 = "AQIDBAU=", .len = 5}};
+    pair pairs[] = {{"\n", "Cg==", 1},
+                    {"12345", "MTIzNDU=", 5},
+                    {"encode_base64", "ZW5jb2RlX2Jhc2U2NA==", 13},
+                    {"\1\2\3\4\5", "AQIDBAU=", 5},
+                    {"\1\2\3\4\5\0", "AQIDBAU=", 5}};
 
     for (auto &p : pairs) {
         auto res = utils::encode_base64(p.base, p.len);
