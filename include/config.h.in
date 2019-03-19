@@ -66,6 +66,10 @@
 
 #cmakedefine HAVE_TIMESPEC_TV_NSEC
 
+#cmakedefine UNIX_HAVE_CLOCK_GETTIME
+
+#cmakedefine UNIX_HAVE_SLEEP
+
 #ifdef HAVE_JEMALLOC
 #include <jemalloc/jemalloc.h>
 

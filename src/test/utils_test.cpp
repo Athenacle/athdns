@@ -176,3 +176,22 @@ TEST(utils, base64Encode)
 }
 
 #endif
+
+TEST(utils, time_object)
+{
+    using utils::time_object;
+    const int sleep_time = 1;
+    time_object begin;
+    sleep(sleep_time);
+    time_object end;
+
+    uint64_t nano = time_object::diff_to_ns(begin, end);
+    double nano_percent = nano / 1000000000.0;
+    EXPECT_FLOAT_EQ(nano_percent, sleep_time);
+
+    double us = time_object::diff_to_us(begin, end);
+    EXPECT_FLOAT_EQ(us, sleep_time * 1000000.0);
+
+    double ms = time_object::diff_to_ms(begin, end);
+    EXPECT_FLOAT_EQ(ms, sleep_time * 1000.0);
+}
