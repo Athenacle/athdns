@@ -67,13 +67,12 @@ namespace utils
         BIO_flush(bio);
         BIO_get_mem_ptr(bio, &mem_buf);
         BIO_set_close(bio, BIO_NOCLOSE);
-        BIO_free_all(bio);
 
         auto len = mem_buf->length;
         auto ret = utils::str_allocate<char>(len + 1);
         memcpy(ret, mem_buf->data, len);
         ret[len] = 0;
-        BUF_MEM_free(mem_buf);
+        BIO_free_all(bio);
         return ret;
 #elif defined HAVE_MBEDTLS
         size_t dest_len = 1.5 * length + 5;
