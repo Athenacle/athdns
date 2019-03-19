@@ -10,6 +10,8 @@ option(ATHDNS_USE_OPENSSL "Prefer OpenSSL as crypto library" ON)
 option(ATHDNS_USE_MBEDTLS "Prefer MBEDTLS as crypto library" OFF)
 option(ATHDNS_USE_JEMALLOC "Use jemalloc for malloc(3)" ON)
 
+
+
 if (${ATHDNS_ENABLE_DOH})
   if (${ATHDNS_USE_OPENSSL} AND ${ATHDNS_USE_MBEDTLS})
     message(STATUS "ATHDNS_USE_OPENSSL and ATHDNS_USE_MBEDTLS cannot be both set. Use OpenSSL.")
@@ -49,7 +51,7 @@ else()
 endif()
 
 include(ThirdParty)
-include(CompilerOptionCheck)
+include(CheckCXXCompilerFlag)
 include(ConfigCheck)
 include(FindLibuv)
 include(TestBigEndian)
@@ -90,9 +92,39 @@ if(${ATHDNS_ENABLE_CODE_COVERAGE})
   append_coverage_compiler_flags()
 endif()
 
-if(${CMAKE_CXX_COMPILER_ID} STREQUAL Clang)
-  add_definitions(-Wno-undef)
-  add_definitions(-Wno-unused-macros)
+
+if ((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR
+    ${CMAKE_CXX_COMPILER_ID} STREQUAL "GNU")
+
+  macro(CXX_COMPILER_CHECK_ADD)
+    set(list_var "${ARGN}")
+    foreach(flag IN LISTS list_var)
+      string(TOUPPER ${flag} FLAG_NAME1)
+      string(REPLACE "-" "_" FLAG_NAME2 ${FLAG_NAME1})
+      string(CONCAT FLAG_NAME "COMPILER_SUPPORT_" ${FLAG_NAME2})
+      check_cxx_compiler_flag(-${flag} ${FLAG_NAME})
+      if (${${FLAG_NAME}})
+        add_compile_options(-${flag})
+      endif()
+    endforeach()
+  endmacro()
+
+  CXX_COMPILER_CHECK_ADD(Wall
+    Wextra
+    Wpedantic
+    Wduplicated-branches
+    Wduplicated-cond
+    Wlogical-op
+    Wrestrict
+    Wnull-dereference
+    Wuseless-cast)
+
+  check_cxx_compiler_flag(-fno-permissive COMPILER_SUPPORT_FNOPERMISSIVE)
+
+  if (${COMPILER_SUPPORT_FNOPERMISSIVE})
+    set(CMAKE_CXX_FLAGS "-fno-permissive ${CMAKE_CXX_FLAGS}")
+  endif()
+
 endif()
 
 test_big_endian(ON_BIG_ENDIAN)
@@ -168,6 +200,19 @@ if (${ATHDNS_USE_JEMALLOC})
     set(ATHDNS_USE_JEMALLOC OFF)
     set(HAVE_JEMALLOC OFF)
   endif()
+endif()
+
+set(ATHDNS_BUILD_SHA "unknown")
+
+find_program(GIT_BIN git)
+
+if (GIT_BIN)
+  execute_process(
+    COMMAND ${GIT_BIN} rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE ATHDNS_BUILD_SHA
+    ERROR_QUIET
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
 endif()
 
 configure_file(${ATHDNS_INCLUDE_ROOT}/config.h.in

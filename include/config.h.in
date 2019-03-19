@@ -21,6 +21,8 @@
 
 #define ENABLE_TESTING "@ATHDNS_ENABLE_TESTING@"
 
+#define BUILD_SHA "@ATHDNS_BUILD_SHA@"
+
 //BUILD SYSTEM
 #cmakedefine ATHDNS_BUILD_ON_UNIX
 
@@ -72,7 +74,12 @@
 #if defined NDEBUG && defined HAVE_BUILTIN_EXPECT
 #define likely(exp) __builtin_expect((exp), 1)
 #define unlikely(exp) __builtin_expect((exp), 0)
-#endif  // HAVE_BUILTIN_EXPECT
+#endif  // NDEBUG && HAVE_BUILTIN_EXPECT
+
+#ifndef likely
+#define likely(exp) (exp)
+#define unlikely(exp) (exp)
+#endif  // likey
 
 #cmakedefine BIG_ENDIAN
 
