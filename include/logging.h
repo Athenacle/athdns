@@ -40,8 +40,18 @@
 #undef DTRACE_OUTPUT
 #define DDEBUG(format, ...)
 #define DTRACE(format, ...)
-
 #endif
+
+#define BUILD_COLOR(value) "\033[" #value "m"
+#define STYLE_RESET BUILD_COLOR(0)
+#define STYLE_NONE BUILD_COLOR(39)
+#define STYLE_FATAL BUILD_COLOR(1) BUILD_COLOR(31)
+#define STYLE_ERROR BUILD_COLOR(31)
+#define STYLE_WARN BUILD_COLOR(33)
+#define STYLE_INFO BUILD_COLOR(32)
+#define STYLE_DEBUG BUILD_COLOR(36)
+#define STYLE_TRACE BUILD_COLOR(34)
+#define STYLE_DTRACE BUILD_COLOR(96)
 
 void* logging_thread(void*);
 

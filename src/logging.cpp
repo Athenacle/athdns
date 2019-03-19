@@ -55,15 +55,15 @@ namespace
     inline constexpr const char* color_dispatch(level l)
     {
         switch (l) {
-            LEVEL_COLOR(none, "\e[39m")
-            LEVEL_COLOR(fatal, "\e[31m")
-            LEVEL_COLOR(error, "\e[31m")
-            LEVEL_COLOR(warn, "\e[33m")
-            LEVEL_COLOR(info, "\e[32m")
-            LEVEL_COLOR(debug, "\e[36m")
-            LEVEL_COLOR(trace, "\e[34m")
+            LEVEL_COLOR(none, STYLE_NONE)
+            LEVEL_COLOR(fatal, STYLE_FATAL)
+            LEVEL_COLOR(error, STYLE_ERROR)
+            LEVEL_COLOR(warn, STYLE_WARN)
+            LEVEL_COLOR(info, STYLE_INFO)
+            LEVEL_COLOR(debug, STYLE_DEBUG)
+            LEVEL_COLOR(trace, STYLE_TRACE)
 #ifndef NDEBUG
-            LEVEL_COLOR(debug_trace, "\e[96m")
+            LEVEL_COLOR(debug_trace, STYLE_DTRACE)
 #endif
         }
         return "";
@@ -145,7 +145,7 @@ void log_sink::write(const logging_object& obj)
 
     if (istty) {
         color = color_dispatch(obj.l);
-        reset = "\e[0m";
+        reset = STYLE_RESET;
     } else {
         color = reset = "";
     }
