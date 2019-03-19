@@ -69,7 +69,7 @@ namespace utils
 
         auto len = mem_buf->length;
         auto ret = utils::str_allocate<char>(len + 1);
-        memcpy(ret, mem_buf->data, len);
+        memmove(ret, mem_buf->data, len);
         ret[len] = 0;
         BUF_MEM_free(mem_buf);
         BIO_set_close(bio, BIO_NOCLOSE);
@@ -191,7 +191,7 @@ namespace utils
             char *p = buffer;
             int empty = 0;
             for (; p < buffer + r; p++) {
-                if (*p == '(' && *p != 0) {
+                if (*p == '(') {
                     while (*p != ')') {
                         p++;
                     }

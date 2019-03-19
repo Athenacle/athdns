@@ -31,7 +31,7 @@ void ip_address::to_string(string &buffer) const
     char buf[8];
     for (int i = 0; i < 4; i++) {
         uint8_t part = (actual >> ((3 - i) * 8)) & 0xff;
-        sprintf(buf, "%d.", part);
+        snprintf(buf, 8, "%d.", part);
         buffer.append(buf);
     }
     buffer.erase(buffer.length() - 1);
@@ -122,7 +122,7 @@ void record_node::fill_data(uint8_t *buf) const
     //  buffer    + 2           + 2    + 2     +  4  + 2           |
     //                                                    pointer -> ^
     uint8_t *pointer = buf + 2 + 2 + 2 + 4 + 2;
-    memcpy(pointer, get_value(), record_data_length);
+    memmove(pointer, get_value(), record_data_length);
 }
 
 int record_node::next_count() const
@@ -295,7 +295,7 @@ record_node_CNAME::record_node_CNAME(uint8_t *buffer, uint8_t *begin, domain_nam
     uint8_t *pointer = begin + DNS_FORMAT_ANSWER_VALUE_OFFSET;
     actual_name = dns::dns_utils::query_string_parser(pointer, buffer);
     value = utils::str_allocate<uint8_t>(record_data_length);
-    memcpy(value, pointer, record_data_length);
+    memmove(value, pointer, record_data_length);
 }
 
 void record_node_CNAME::to_string(string &str) const
