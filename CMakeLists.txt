@@ -60,7 +60,6 @@ if(${ATHDNS_ENABLE_DOH})
   set(HAVE_DOH_SUPPORT ON)
   include(FindNgHttp2)
   include_directories(${NGHTTP2_INCLUDE_DIR})
-  list(APPEND SSL_LIB ${NGHTTP2_LIBRARY})
   if (${ATHDNS_USE_OPENSSL})
     include(FindOpenSSL)
     if (NOT ${OpenSSL_FOUND})
@@ -184,7 +183,13 @@ configure_file(${ATHDNS_INCLUDE_ROOT}/config.h.in
 
 add_definitions(-DHAVE_CONFIG_H)
 
-target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS} ${LIBUV_LIBRARIES} ${SSL_LIB} pthread)
+if (${ATHDNS_ENABLE_DOH})
+  target_link_libraries(${PROJECT_NAME} ${NGHTTP2_LIBRARY} ${SSL_LIB})
+endif()
+
+target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS} pthread)
+target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS} ${LIBUV_LIBRARIES})
+
 
 if (${ATHDNS_ENABLE_TESTING})
   enable_testing()

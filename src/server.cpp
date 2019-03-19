@@ -26,6 +26,7 @@
 #include <utility>
 
 #ifdef HAVE_DOH_SUPPORT
+#include "doh.h"
 #ifdef HAVE_OPENSSL
 #include <openssl/ssl.h>
 #endif

@@ -4,9 +4,13 @@ IP_PART {DIGIT}{1,3}
 IP_ADDRESS {IP_PART}\.{IP_PART}\.{IP_PART}\.{IP_PART}
 WS [ \t\s\a\r]
 TEXT [a-zA-Z0-9/]+
-DOMAIN [a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}
-URL_PART \/[a-zA-Z0-9\-_]+
-URL {DOMAIN}{URL_PART}*
+
+BASE_CHAR [a-zA-Z0-9\-]
+FULL_CHAR {BASE_CHAR}|[_\-]
+TLD [a-zA-Z]{2,}
+DOMAIN ({BASE_CHAR}{1,64}\.)+[a-zA-Z]{2,}
+URL_PART [a-zA-Z\-_]+
+URL {DOMAIN}\/{URL_PART}*
 
 %{
 #include "config_file.h"
@@ -22,8 +26,8 @@ URL {DOMAIN}{URL_PART}*
 
 #.*\n                                               { return COMMENT; }
 
-{DOMAIN}                                            {yylval.text =strdup(yytext); return DOMAIN; }
 {URL}                                               {yylval.text =strdup(yytext); return URL; }
+{DOMAIN}                                            {yylval.text =strdup(yytext); return DOMAIN; }
 
 ":"                                                 { return COLON; }
 "listen"                                            { return KW_LISTEN; }
@@ -35,7 +39,7 @@ URL {DOMAIN}{URL_PART}*
 "default-ttl"                                       { return KW_DEFAULT_TTL; }
 "timeout-requery"                                   { return KW_RE_QUERY; }
 "server"                                            { return KW_SERVER; }
-
+"doh"                                               { return KW_DOH; }
 
 "DEBUG"                                             { return KW_LOG_DEBUG; }
 "TRACE"                                             { return KW_LOG_TRACE; }

@@ -1,3 +1,14 @@
+/*
+ * Copyright (c) 2019 WangXiao <zjjhwxc@gmail.com>
+ *
+ * This Project is licensed under the MIT License.
+ * Please refer to LICENSE file at root directory for more information
+ *
+ * athdns: simple DNS forwarder
+ *
+ */
+
+// remote.h : DOS upstream
 
 #ifndef RSERVER_H
 #define RSERVER_H
@@ -11,18 +22,6 @@
 
 #include <map>
 #include <queue>
-
-#ifdef HAVE_DOH_SUPPORT
-#ifdef HAVE_OPENSSL
-#include <openssl/bio.h>
-#include <openssl/evp.h>
-#include <openssl/ssl.h>
-#else
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ssl.h"
-#endif  // HAVE_OPENSSL
-#endif
 
 namespace remote
 {
@@ -121,12 +120,17 @@ namespace remote
         void stop_remote();
 
         virtual void send(objects::send_object *) = 0;
-        virtual void init_remote() = 0;
+        void init_remote();
         virtual void destroy_remote() = 0;
 
         const ip_address &get_ip_address() const
         {
             return remote_address;
+        }
+
+        void single_thread_check() const
+        {
+            assert(pthread_self() == *work_thread);
         }
 
         int get_port() const
@@ -172,7 +176,7 @@ namespace remote
         void swap(const udp_nameserver &);
 
         virtual void send(objects::send_object *obj) override;
-        virtual void init_remote() override;
+        void init_remote();
         virtual void destroy_remote() override;
 
         uv_udp_t *get_udp_hander() const
@@ -184,89 +188,6 @@ namespace remote
         udp_nameserver(udp_nameserver &&) = delete;
         udp_nameserver(const udp_nameserver &) = delete;
     };
-
-    class doh_nameserver : public abstract_nameserver
-    {
-        enum class ssl_state { not_init, initing, established, closing, closed };
-
-        uv_os_sock_t sock_fd;
-
-        const char *url;
-        string domain;
-
-        uv_tcp_t *handle;
-        uv_timer_t *ssl_state_check;
-
-        bool started;
-
-        pthread_spinlock_t *state_lock;
-        ssl_state state;
-
-        uv_stream_t *get_stream_handle() const
-        {
-            return reinterpret_cast<uv_stream_t *>(handle);
-        }
-
-#ifdef HAVE_OPENSSL
-        SSL *ssl;
-        SSL_CTX *ssl_ctx;
-        BIO *read_bio;
-        BIO *write_bio;
-
-        int openssl_socket_send(int);
-        int openssl_socket_read(int);
-
-        int openssl_ssl_init(int);
-        int openssl_ssl_destroy();
-#else
-        mbedtls_entropy_context *entropy;
-        mbedtls_ssl_context *ssl;
-        mbedtls_ssl_config *conf;
-        mbedtls_ctr_drbg_context *ctr_drbg;
-
-        int mbedtls_socket_send(int);
-        int mbedtls_socket_read(int);
-        int mbedtls_ssl_init(int);
-        int mbedtls_ssl_destroy();
-#endif
-
-        void init_ssl_library(ip_address *);
-        void destroy_ssl_library();
-
-        int socket_connect(const sockaddr_in *);
-
-        ssl_state get_state() const
-        {
-            pthread_spin_lock(state_lock);
-            auto ret = state;
-            pthread_spin_unlock(state_lock);
-            return ret;
-        }
-
-        void set_state(ssl_state s)
-        {
-            pthread_spin_lock(state_lock);
-            state = s;
-            pthread_spin_unlock(state_lock);
-        }
-
-    protected:
-        virtual void implement_do_startup() override;
-        virtual void implement_stop_cb() override;
-
-        void start();
-
-    public:
-        doh_nameserver(const char *u);
-        virtual ~doh_nameserver();
-
-        virtual void send(objects::send_object *) override;
-
-        virtual void init_remote() override;
-
-        virtual void destroy_remote() override;
-    };
-
 }  // namespace remote
 
 namespace fmt
