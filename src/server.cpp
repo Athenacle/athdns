@@ -385,7 +385,7 @@ void global_server::forward_item_all(forward_item_pointer& item)
         send_object* obj = new send_object;
         obj->bufs = item->req->buf;
         obj->bufs_count = 1;
-        obj->sock = reinterpret_cast<sockaddr*>(ns->get_sock());
+        obj->sock = ns->get_sock();
         ns->send(obj);
         ns->increase_forward();
         ns->insert_sending({item->forward_id, item});

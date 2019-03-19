@@ -31,7 +31,7 @@ namespace test
 
     ip_address **system_query_A(const char *, int &);
 
-};  // namespace test
+}  // namespace test
 
 
 #endif
