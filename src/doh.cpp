@@ -58,7 +58,7 @@ namespace
         }
         return ptr;
     }
-};  // namespace
+}  // namespace
 
 
 namespace
@@ -581,7 +581,6 @@ namespace
 */
 void doh_nameserver::do_send(objects::send_object* obj)
 {
-    auto uvbuf = reinterpret_cast<uv_buf_t*>(obj->bufs);
     nghttp2_priority_spec spec;
     nghttp2_priority_spec_init(&spec, 0, 100, 0);
 

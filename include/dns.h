@@ -147,7 +147,7 @@ namespace dns
         int query_string_generator(const char *, uint8_t *, size_t);
 
         bool ip_string_to_uint32(const char *, uint32_t &);
-    };  // namespace dns_utils
+    }  // namespace dns_utils
 
 
     class Query
