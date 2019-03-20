@@ -236,6 +236,8 @@ time_object::time_object()
 
 uint64_t time_object::diff_to_ns(const time_object &begin, const time_object &end)
 {
+    assert(begin.t.tv_sec <= end.t.tv_sec
+           || (begin.t.tv_sec == end.t.tv_sec && begin.t.tv_nsec <= end.t.tv_nsec));
     auto s = end.t.tv_sec - begin.t.tv_sec;
     uint64_t ret = s * 1000000000 + end.t.tv_nsec - begin.t.tv_nsec;
     return ret;

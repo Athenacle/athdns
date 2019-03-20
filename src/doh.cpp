@@ -15,8 +15,6 @@
 #include "remote.h"
 #include "server.h"
 
-#include <cstdio>
-
 using h2h = nghttp2_headers;
 using h2f = nghttp2_frame;
 using h2s = nghttp2_session;
@@ -830,11 +828,8 @@ void doh_nameserver::recv_response(int sid)
     } else {
         auto p = itor->second;
         if (p->response_time == 0) {
-            struct timespec current;
-            clock_gettime(ATHDNS_CLOCK_GETTIME_FLAG, &current);
-            const auto sent_time = &itor->second->time;
-            p->response_time = (current.tv_sec - sent_time->tv_sec) * 1000000000
-                               + (current.tv_nsec - sent_time->tv_nsec);
+            utils::time_object current;
+            p->response_time = utils::time_object::diff_to_ms(current, itor->second->begin_time);
         }
     }
 }
@@ -847,7 +842,7 @@ void doh_nameserver::h2_stream_close(int stream_id)
     } else {
         DTRACE("h2 request for stream {0} closed, cost time {1:2.2f} ms",
                stream_id,
-               itor->second->response_time / 1000000.0);
+               itor->second->response_time);
         delete itor->second;
         forward_table.erase(itor);
     }

@@ -18,7 +18,6 @@
 #include "fmt/ostream.h"
 
 #include <arpa/inet.h>
-#include <ctime>
 #include <memory>
 
 namespace objects

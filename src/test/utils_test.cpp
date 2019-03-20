@@ -15,8 +15,6 @@
 #include "athdns.h"
 #include "utils.h"
 
-#include <sys/time.h>
-
 #include <bitset>
 
 using namespace utils;
@@ -51,9 +49,8 @@ TEST(utils, alloctorVSnew)
 
     std::vector<simple *> vec;
     utils::allocator_pool<simple> spool(20000);
-    timeval allocator_begin;
-    gettimeofday(&allocator_begin, nullptr);
 
+    time_object begin;
     for (int i = 0; i < count; i++) {
         simple *p = spool.allocate();
         array[i] = p;
@@ -61,14 +58,11 @@ TEST(utils, alloctorVSnew)
     for (int i = 0; i < count; i++) {
         spool.deallocate(array[i]);
     }
-    timeval allocator_end;
-    gettimeofday(&allocator_end, nullptr);
+    time_object end;
     vec.clear();
-    double alloctimeuse = 1000000.0 * (allocator_end.tv_sec - allocator_begin.tv_sec)
-                          + allocator_end.tv_usec - allocator_begin.tv_usec;
-    timeval nd_begin;
-    gettimeofday(&nd_begin, nullptr);
+    auto alloctimeuse = time_object::diff_to_ms(begin, end);
 
+    time_object ndbegin;
     for (int i = 0; i < count; i++) {
         simple *p = new simple;
         array[i] = p;
@@ -76,16 +70,13 @@ TEST(utils, alloctorVSnew)
     for (int i = 0; i < count; i++) {
         delete (array[i]);
     }
-    timeval nd_end;
-    gettimeofday(&nd_end, nullptr);
+    time_object ndend;
 
-    double nduse =
-        1000000.0 * (nd_end.tv_sec - nd_begin.tv_sec) + nd_end.tv_usec - nd_begin.tv_usec;
+    auto nduse = time_object::diff_to_ms(ndbegin, ndend);
 
     char op = alloctimeuse > nduse ? '>' : '<';
 
-    std::cout << "allocator: " << alloctimeuse / 1000000 << " " << op << " nd: " << nduse / 1000000
-              << std::endl;
+    std::cout << "allocator: " << alloctimeuse << " " << op << " nd: " << nduse << std::endl;
     delete[] array;
 }
 
