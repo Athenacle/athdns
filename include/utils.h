@@ -49,65 +49,23 @@ namespace utils
     char *encode_base64(const char *);
 #endif
 
-    template <class T>
-    T *str_allocate(size_t count)
+    inline bool str_equal(const char *s1, const char *s2)
     {
-        return reinterpret_cast<T *>(::malloc(sizeof(T) * count));
+        auto l1 = strlen(s1);
+        auto l2 = strlen(s2);
+        if (likely(l1 != l2)) {
+            return false;
+        } else {
+            return strncmp(s1, s2, l1) == 0;
+        }
     }
 
-
-    template <class C>
-    size_t strlen(const C *const str)
+    inline char *str_dump(const char *s)
     {
-        return std::char_traits<C>::length(str);
-    }
-
-    template <class C>
-    int strcmp(const C *const s1, const C *const s2)
-    {
-        auto sl1 = strlen(s1);
-        auto sl2 = strlen(s2);
-        return std::char_traits<C>::compare(s1, s2, sl1 > sl2 ? sl2 : sl1);
-    }
-
-    template <class C>
-    void strcpy(C *to, const C *from)
-    {
-        std::char_traits<C>::copy(to, from, strlen(from));
-    }
-
-    template <class C>
-    C *strdup(const C *const str)
-    {
-        const auto len = strlen(str);
-        auto ret = str_allocate<C>(len + 1);
-        strcpy(ret, str);
-        std::char_traits<C>::assign(ret[len], 0);
+        auto length = strlen(s) + 1;
+        auto ret = new char[length];
+        strncpy(ret, s, length);
         return ret;
-    }
-
-    template <class C>
-    void strfree(const C *str)
-    {
-        if (likely(str != nullptr)) {
-            ::free((void *)str);
-        }
-    }
-
-    template <class T>
-    T *make(const T *pointer)
-    {
-        auto ret = ::malloc(sizeof(T));
-        std::memcpy(ret, pointer, sizeof(T));
-        return reinterpret_cast<T *>(ret);
-    }
-
-    template <class T>
-    void destroy(const T *const p)
-    {
-        if (likely(p != nullptr)) {
-            ::free((void *)p);
-        }
     }
 
     template <class T, class _ = std::enable_if_t<std::is_integral<T>::value, int>>
@@ -191,69 +149,6 @@ namespace utils
 
     using atomic_int = atomic_number<int>;
     using atomic_uint16 = atomic_number<uint16_t>;
-
-    class bit_container
-    {
-        size_t bc_size;
-        size_t buffer_size;
-        uint32_t *buffer;
-
-    public:
-        size_t size() const
-        {
-            return bc_size;
-        }
-
-        bit_container(size_t total)
-        {
-            bc_size = total;
-            buffer_size = bc_size + 32;
-            buffer = new uint32_t[buffer_size / 32];
-            std::memset(buffer, 0, buffer_size / 32);
-        }
-
-        ~bit_container()
-        {
-            delete[] buffer;
-        }
-
-        void set(size_t offset, bool value)
-        {
-            size_t int_offset = offset / 32;
-            size_t bit_offset = offset % 32;
-            uint32_t mask = 1 << bit_offset;
-            if (value) {
-                // set to 1
-                *(buffer + int_offset) = *(buffer + int_offset) | mask;
-            } else {
-                mask = ~mask;
-                *(buffer + int_offset) &= mask;
-            }
-        }
-
-        bool test(size_t offset) const
-        {
-            size_t int_offset = offset / 32;
-            size_t bit_offset = offset % 32;
-            uint32_t v = *(buffer + int_offset) >> bit_offset;
-            return (v & 1) == 1;
-        }
-
-        void resize(size_t new_size)
-        {
-            if (new_size < bc_size) {
-                return;
-            }
-            auto old_buffer_size = buffer_size;
-            bc_size = new_size;
-            buffer_size = bc_size + 32;
-            auto old_buffer = buffer;
-            buffer = new uint32_t[buffer_size / 32];
-            std::memset(buffer, 0, buffer_size / 32);
-            std::memcpy(buffer, old_buffer, old_buffer_size / 32);
-            delete[] old_buffer;
-        }
-    };
 
     template <class T, unsigned int N = 1>
     class allocator_pool

@@ -68,7 +68,7 @@ record_node::~record_node()
 {
     auto next = node_next;
     if (unlikely(name != nullptr)) {
-        utils::strfree(name);
+        delete[] name;
     }
     if (unlikely(next != nullptr)) {
         delete next;
@@ -89,7 +89,7 @@ record_node::record_node(uint8_t *buffer, uint8_t *begin, const char *domain)
     record_data_length = ntohs(*(p + 5));
 
     if (domain != nullptr) {
-        name = utils::strdup(domain);
+        name = utils::str_dump(domain);
     } else {
         name = dns::dns_utils::query_string_parser(buffer + offset, buffer);
     }
@@ -139,7 +139,7 @@ int record_node::next_count() const
 record_node::record_node(domain_name n)
 {
     if (n != nullptr) {
-        name = utils::strdup(n);
+        name = utils::str_dump(n);
     }
 
     node_next = nullptr;
@@ -171,7 +171,7 @@ void record_node::get_value(uint32_t &rttl,
 
 bool record_node::domain_name_equal(domain_name n) const
 {
-    return utils::strcmp(n, this->name) == 0;
+    return utils::str_equal(n, this->name);
 }
 
 bool record_node::operator==(const record_node &) const
@@ -285,8 +285,8 @@ const uint8_t *record_node_A::get_value() const
 
 record_node_CNAME::~record_node_CNAME()
 {
-    utils::strfree(actual_name);
-    utils::strfree(value);
+    delete[] actual_name;
+    delete[] value;
 }
 
 record_node_CNAME::record_node_CNAME(uint8_t *buffer, uint8_t *begin, domain_name name)
@@ -294,7 +294,7 @@ record_node_CNAME::record_node_CNAME(uint8_t *buffer, uint8_t *begin, domain_nam
 {
     uint8_t *pointer = begin + DNS_FORMAT_ANSWER_VALUE_OFFSET;
     actual_name = dns::dns_utils::query_string_parser(pointer, buffer);
-    value = utils::str_allocate<uint8_t>(record_data_length);
+    value = new uint8_t[record_data_length];
     memmove(value, pointer, record_data_length);
 }
 

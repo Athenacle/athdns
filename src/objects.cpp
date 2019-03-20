@@ -51,7 +51,9 @@ request::request(const uv_buf_t* buffer, ssize_t size, const sockaddr* addr, uv_
     buf = global_server::get_server().new_uv_buf_t();
     buf->len = size;
     buf->base = buffer->base;
-    sock = utils::make(addr);
+    sockaddr* new_sock = new sockaddr;
+    memmove(new_sock, addr, sizeof(*addr));
+    sock = new_sock;
     udp = u;
 }
 
@@ -59,7 +61,7 @@ request::~request()
 {
     if (likely(sock != nullptr)) {
         utils::free_buffer(buf->base);
-        utils::destroy(sock);
+        delete sock;
     }
     global_server::get_server().delete_uv_buf_t(buf);
 }
