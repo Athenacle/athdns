@@ -270,7 +270,7 @@ TEST(hash_table, hash_test)
         auto p = random_string(rlen);
         auto pos = std::find_if(vec.cbegin(), vec.cend(), [&](auto &ref) {
             auto &ptr = std::get<0>(ref);
-            return utils::strcmp(ptr, p) == 0;
+            return utils::str_equal(ptr, p);
         });
         auto vec_exist = pos == vec.cend();
         EXPECT_EQ(!vec_exist, table.exists(p));

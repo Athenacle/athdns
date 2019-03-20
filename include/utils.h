@@ -49,65 +49,23 @@ namespace utils
     char *encode_base64(const char *);
 #endif
 
-    template <class T>
-    T *str_allocate(size_t count)
+    inline bool str_equal(const char *s1, const char *s2)
     {
-        return reinterpret_cast<T *>(::malloc(sizeof(T) * count));
+        auto l1 = strlen(s1);
+        auto l2 = strlen(s2);
+        if (likely(l1 != l2)) {
+            return false;
+        } else {
+            return strncmp(s1, s2, l1) == 0;
+        }
     }
 
-
-    template <class C>
-    size_t strlen(const C *const str)
+    inline char *str_dump(const char *s)
     {
-        return std::char_traits<C>::length(str);
-    }
-
-    template <class C>
-    int strcmp(const C *const s1, const C *const s2)
-    {
-        auto sl1 = strlen(s1);
-        auto sl2 = strlen(s2);
-        return std::char_traits<C>::compare(s1, s2, sl1 > sl2 ? sl2 : sl1);
-    }
-
-    template <class C>
-    void strcpy(C *to, const C *from)
-    {
-        std::char_traits<C>::copy(to, from, strlen(from));
-    }
-
-    template <class C>
-    C *strdup(const C *const str)
-    {
-        const auto len = strlen(str);
-        auto ret = str_allocate<C>(len + 1);
-        strcpy(ret, str);
-        std::char_traits<C>::assign(ret[len], 0);
+        auto length = strlen(s) + 1;
+        auto ret = new char[length];
+        strncpy(ret, s, length);
         return ret;
-    }
-
-    template <class C>
-    void strfree(const C *str)
-    {
-        if (likely(str != nullptr)) {
-            ::free((void *)str);
-        }
-    }
-
-    template <class T>
-    T *make(const T *pointer)
-    {
-        auto ret = ::malloc(sizeof(T));
-        std::memcpy(ret, pointer, sizeof(T));
-        return reinterpret_cast<T *>(ret);
-    }
-
-    template <class T>
-    void destroy(const T *const p)
-    {
-        if (likely(p != nullptr)) {
-            ::free((void *)p);
-        }
     }
 
     template <class T, class _ = std::enable_if_t<std::is_integral<T>::value, int>>

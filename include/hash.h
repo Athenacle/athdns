@@ -82,7 +82,7 @@ namespace hash
         struct unordered_map_equal {
             bool operator()(const domain_name &lhs, const domain_name &rhs) const
             {
-                return utils::strcmp(lhs, rhs) == 0;
+                return utils::str_equal(lhs, rhs);
             }
         };
 

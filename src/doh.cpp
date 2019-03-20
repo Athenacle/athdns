@@ -177,7 +177,7 @@ namespace
 #ifdef DTRACE_OUTPUT
         auto b = utils::encode_base64(data, len);
         DTRACE("data chunk recv {0}", b);
-        utils::strfree(b);
+        delete[](b);
 #endif
         auto doh = to_doh(user_data);
         doh->h2_submit_data(sid, data, len);
@@ -302,21 +302,21 @@ doh_nameserver::~doh_nameserver()
     delete state_lock;
     delete async_rst_handler;
     delete timer_ssl_check;
-    utils::strfree(url);
-    utils::strfree(path);
-    utils::strfree(domain);
+    delete[] url;
+    delete[] path;
+    delete[] domain;
 }
 
 void doh_nameserver::init_path(const char* uri)
 {
     doh_servers.push_back(this);
 
-    url = utils::strdup(uri);
+    url = utils::str_dump(uri);
     string full(uri);
-    auto len = utils::strlen(uri);
+    auto len = strlen(uri);
 
-    path = utils::str_allocate<char>(len);
-    domain = utils::str_allocate<char>(len);
+    path = new char[len];
+    domain = new char[len];
     int first_sep = 0;
     for (; uri[first_sep] != 0 && uri[first_sep] != '/'; first_sep++) {
         domain[first_sep] = std::tolower(uri[first_sep]);
@@ -451,7 +451,7 @@ void send_complete_cb(uv_write_t* req, int flag)
     }
     auto buf = reinterpret_cast<uv_buf_t*>(req->data);
     if (unlikely(buf->len > recv_buffer_size)) {
-        utils::strfree(buf->base);
+        delete[] buf->base;
     } else {
         utils::free_buffer(buf->base);
     }
@@ -858,7 +858,7 @@ void doh_nameserver::h2_submit_data(int stream_id, const uint8_t* data, size_t l
         if (itor->second->status_code == 200) {
             char* buf;
             if (len > recv_buffer_size) {
-                buf = utils::str_allocate<char>(len);
+                buf = new char[len];
             } else {
                 buf = utils::get_buffer();
             }

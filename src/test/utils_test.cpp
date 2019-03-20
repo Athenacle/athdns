@@ -161,8 +161,8 @@ TEST(utils, base64Encode)
         auto res2 = utils::encode_base64(p.base);
         EXPECT_STREQ(res2, p.base64) << p.base;
         EXPECT_STREQ(res, p.base64) << p.base;
-        utils::strfree(res);
-        utils::strfree(res2);
+        delete[] res;
+        delete[] res2;
     }
 }
 

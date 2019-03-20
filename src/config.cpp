@@ -198,7 +198,7 @@ void config_listen_at(const char* ip, long long port)
     uint32_t ipv;
     if (check_ip_address(ip, ipv)) {
         if (port > 0 && port < 65536) {
-            global_server::get_server().config_listen_at(utils::strdup(ip), port);
+            global_server::get_server().config_listen_at(utils::str_dump(ip), port);
         } else {
             FATAL("invalid listen port {0}", port);
         }
