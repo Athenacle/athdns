@@ -118,8 +118,7 @@ void global_server::init_server_loop()
     utils::check_uv_return_status(status, "timer cleaner init");
 
     if (listen_address.size() == 0) {
-        listen_address.emplace_back(
-            std::make_tuple(utils::strdup("0.0.0.0"), 53, nullptr, nullptr));
+        listen_address.emplace_back(std::make_tuple(strdup("0.0.0.0"), 53, nullptr, nullptr));
     }
 
     for (auto& listen : listen_address) {
@@ -304,7 +303,7 @@ global_server::~global_server()
         delete ns;
     }
     for (auto& listen : listen_address) {
-        utils::strfree(std::get<0>(listen));
+        delete[] std::get<0>(listen);
         delete std::get<2>(listen);
         delete std::get<3>(listen);
     }

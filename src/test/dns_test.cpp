@@ -183,11 +183,11 @@ TEST(DNS_utils, query_string_generator)
 
     memset(buffer, 0xcc, buffer_size);
     auto ret = query_string_generator(eo, buffer, buffer_size);
-    EXPECT_EQ(ret, static_cast<int>(utils::strlen(eo) + 2));
+    EXPECT_EQ(ret, static_cast<int>(strlen(eo) + 2));
     EXPECT_EQ(memcmp(ecb, buffer, sizeof(ecb)), 0);
     memset(buffer, 0xcc, buffer_size);
     ret = query_string_generator(weo, buffer, buffer_size);
-    EXPECT_EQ(ret, static_cast<int>(utils::strlen(weo) + 2));
+    EXPECT_EQ(ret, static_cast<int>(strlen(weo) + 2));
     EXPECT_EQ(memcmp(weob, buffer, sizeof(weob)), 0);
 }
 
@@ -266,16 +266,16 @@ TEST(DNS_utils, query_string_parser)
     char eos[] = "example.org";
 
     auto eot = query_string_parser(eo);
-    EXPECT_TRUE(utils::strcmp(eot, eos) == 0);
-    utils::strfree(eot);
+    EXPECT_STREQ(eot, eos);
+    delete[] eot;
 
     uint8_t wwweo[] = {0x03, 0x77, 0x77, 0x77, 0x03, 0x77, 0x77, 0x77, 0x03, 0x77, 0x77, 0x77, 0x07,
                        0x65, 0x78, 0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x6f, 0x72, 0x67, 0x00};
     char wwweos[] = "www.www.www.example.org";
 
     eot = query_string_parser(wwweo);
-    EXPECT_TRUE(utils::strcmp(eot, wwweos) == 0);
-    utils::strfree(eot);
+    EXPECT_STREQ(eot, wwweos);
+    delete[] eot;
 }
 
 TEST(DNS_utils, ip_string_to_uint32)

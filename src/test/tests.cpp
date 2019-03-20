@@ -102,8 +102,8 @@ void* combined_test_startup(void*)
 #if defined BUILD_ROOT
     WARN("starting global_server");
     const char test_conf_file[] = BUILD_ROOT "/src/test/test.conf";
-    test_obj->argv[0] = utils::strdup(PROJECT_NAME);
-    test_obj->argv[1] = utils::strdup(test_conf_file);
+    test_obj->argv[0] = utils::str_dump(PROJECT_NAME);
+    test_obj->argv[1] = utils::str_dump(test_conf_file);
     if (access(test_conf_file, R_OK) == 0) {
         global_server::init_instance();
         utils::config_system(2, test_obj->argv);
@@ -129,8 +129,8 @@ void stop_test_server()
         pthread_barrier_destroy(test_obj->barrier);
         delete test_obj->barrier;
     }
-    utils::strfree(test_obj->argv[0]);
-    utils::strfree(test_obj->argv[1]);
+    delete[] test_obj->argv[0];
+    delete[] test_obj->argv[1];
     delete[] test_obj->argv;
     delete test_obj;
 #endif

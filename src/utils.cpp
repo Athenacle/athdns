@@ -51,7 +51,7 @@ namespace utils
 #ifdef HAVE_DOH_SUPPORT
     char *encode_base64(const char *buf)
     {
-        return encode_base64(buf, utils::strlen(buf));
+        return encode_base64(buf, strlen(buf));
     }
 
     char *encode_base64(const void *buffer, size_t length)
@@ -70,7 +70,7 @@ namespace utils
         BIO_get_mem_ptr(bio, &mem_buf);
 
         auto len = mem_buf->length;
-        auto ret = utils::str_allocate<char>(len + 1);
+        auto ret = new char[len + 1];
         memmove(ret, mem_buf->data, len);
         ret[len] = 0;
         BUF_MEM_free(mem_buf);
@@ -79,7 +79,7 @@ namespace utils
         return ret;
 #elif defined HAVE_MBEDTLS
         size_t dest_len = 1.5 * length + 5;
-        auto ret = utils::str_allocate<unsigned char>(dest_len);
+        auto ret = new unsigned char[dest_len];
         size_t out_len = 0;
 
         auto status = mbedtls_base64_encode(
@@ -138,7 +138,7 @@ namespace utils
 
     void split(vector<string> &vec, const CH *s, const CH c)
     {
-        const auto bak = strdup(s);
+        const auto bak = utils::str_dump(s);
         auto begin = bak;
         auto ptr = bak;
         do {
@@ -158,7 +158,7 @@ namespace utils
                 break;
             }
         } while (true);
-        strfree(bak);
+        delete[] bak;
     }
 
     bool check_ip_address(const CH *ip, uint32_t &address)
