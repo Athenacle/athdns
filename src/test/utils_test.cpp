@@ -159,9 +159,6 @@ TEST(utils, time_object)
     uint64_t nano = time_object::diff_to_ns(begin, end);
     double nano_percent = nano / (1000000000.0 * sleep_time);
 
-    EXPECT_TRUE(nano_percent > 1.0);
-    EXPECT_TRUE(nano_percent < 1.5);
-
     double us = time_object::diff_to_us(begin, end);
 
     double ms = time_object::diff_to_ms(begin, end);
