@@ -13,11 +13,12 @@ addons:
 before_install:
     - export CXX="g++-7" CC="gcc-7"
 script: 
-  - scripts/build.sh
+  - scripts/build.bash
 after_success:
   - scripts/upload.bash
 branches:
   only:
     - master
+    - develop
 notifications:
   email: false
