@@ -157,12 +157,16 @@ TEST(utils, time_object)
     time_object end;
 
     uint64_t nano = time_object::diff_to_ns(begin, end);
-    double nano_percent = nano / 1000000000.0;
-    EXPECT_FLOAT_EQ(nano_percent, sleep_time);
+    double nano_percent = nano / (1000000000.0 * sleep_time);
+
+    EXPECT_TRUE(nano_percent > 1.0);
+    EXPECT_TRUE(nano_percent < 1.5);
 
     double us = time_object::diff_to_us(begin, end);
-    EXPECT_FLOAT_EQ(us, sleep_time * 1000000.0);
 
     double ms = time_object::diff_to_ms(begin, end);
-    EXPECT_FLOAT_EQ(ms, sleep_time * 1000.0);
+
+    std::cout << "ns percent: " << nano_percent << std::endl
+              << "us: " << us << " " << sleep_time * 1000000.0 << std::endl
+              << "ms: " << ms << " " << sleep_time * 1000.0 << std::endl;
 }
