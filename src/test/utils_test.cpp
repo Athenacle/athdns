@@ -120,26 +120,6 @@ TEST(utils, split)
 
 #undef ARRAY_SPLIT_TEST
 
-
-TEST(utils, bit_container)
-{
-    const int size = 102400;
-
-    bitset<size> bs;
-    bit_container bc(size);
-
-    for (size_t i = 0; i < size; i++) {
-        bool b = test::random_value() % 2 == 0;
-        bc.set(i, b);
-        bs.set(i, b);
-        ASSERT_EQ(bs.test(i), bc.test(i)) << i;
-    }
-
-    for (size_t i = 0; i < size; i++) {
-        ASSERT_EQ(bs.test(i), bc.test(i)) << i;
-    }
-}
-
 #ifdef HAVE_DOH_SUPPORT
 
 TEST(utils, base64Encode)

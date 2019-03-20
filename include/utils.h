@@ -150,69 +150,6 @@ namespace utils
     using atomic_int = atomic_number<int>;
     using atomic_uint16 = atomic_number<uint16_t>;
 
-    class bit_container
-    {
-        size_t bc_size;
-        size_t buffer_size;
-        uint32_t *buffer;
-
-    public:
-        size_t size() const
-        {
-            return bc_size;
-        }
-
-        bit_container(size_t total)
-        {
-            bc_size = total;
-            buffer_size = bc_size + 32;
-            buffer = new uint32_t[buffer_size / 32];
-            std::memset(buffer, 0, buffer_size / 32);
-        }
-
-        ~bit_container()
-        {
-            delete[] buffer;
-        }
-
-        void set(size_t offset, bool value)
-        {
-            size_t int_offset = offset / 32;
-            size_t bit_offset = offset % 32;
-            uint32_t mask = 1 << bit_offset;
-            if (value) {
-                // set to 1
-                *(buffer + int_offset) = *(buffer + int_offset) | mask;
-            } else {
-                mask = ~mask;
-                *(buffer + int_offset) &= mask;
-            }
-        }
-
-        bool test(size_t offset) const
-        {
-            size_t int_offset = offset / 32;
-            size_t bit_offset = offset % 32;
-            uint32_t v = *(buffer + int_offset) >> bit_offset;
-            return (v & 1) == 1;
-        }
-
-        void resize(size_t new_size)
-        {
-            if (new_size < bc_size) {
-                return;
-            }
-            auto old_buffer_size = buffer_size;
-            bc_size = new_size;
-            buffer_size = bc_size + 32;
-            auto old_buffer = buffer;
-            buffer = new uint32_t[buffer_size / 32];
-            std::memset(buffer, 0, buffer_size / 32);
-            std::memcpy(buffer, old_buffer, old_buffer_size / 32);
-            delete[] old_buffer;
-        }
-    };
-
     template <class T, unsigned int N = 1>
     class allocator_pool
     {
