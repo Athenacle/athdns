@@ -15,8 +15,9 @@
 
 #include "athdns.h"
 
-#include <arpa/inet.h>
+#include "fmt/ostream.h"
 
+#include <arpa/inet.h>
 #include <memory>
 
 namespace objects
@@ -142,6 +143,7 @@ namespace objects
         forward_item_pointer item;
         int ns_index;
     };
+
 }  // namespace objects
 
 #endif

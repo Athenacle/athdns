@@ -12,11 +12,7 @@
 
 #include "logging.h"
 
-#include "fmt/time.h"
-
 #include <unistd.h>
-
-#include <ctime>
 
 using namespace logging;
 
@@ -130,17 +126,6 @@ log_sink::log_sink(int fd)
 
 void log_sink::write(const logging_object& obj)
 {
-    static string buffer;
-    static string time_buffer;
-    std::tm* t = nullptr;
-#ifdef GETTIMEOFDAY
-    t = std::localtime(&obj.t.tv_sec);
-#else
-    t = std::localtime(&obj.t);
-#endif
-
-    time_buffer = fmt::format("{:%Y-%m-%d %H:%M:%S}", *t);
-
     const char *color, *reset;
 
     if (istty) {
@@ -150,18 +135,8 @@ void log_sink::write(const logging_object& obj)
         color = reset = "";
     }
 
-#ifdef GETTIMEOFDAY
-    buffer = fmt::format("{0}:{1:=06d} [{2}{3:5}{4}] - {5}\n",
-                         time_buffer,
-                         obj.t.tv_usec,
-                         color,
-                         level_string(obj.l),
-                         reset,
-                         obj.msg);
-#else
-    buffer = fmt::format(
-        "{0} [{1}{2}{3}] - {4}\n", time_buffer, color, level_string(obj.l), reset, obj.msg);
-#endif
+    auto buffer =
+        fmt::format("{0} [{1}{2:5}{3}] - {4}\n", obj.t, color, level_string(obj.l), reset, obj.msg);
 
     auto w = ::write(dest, buffer.c_str(), buffer.length());
     if (w == -1) {
@@ -174,14 +149,7 @@ void log_sink::write(const logging_object& obj)
     }
 }
 
-logging_object::logging_object(level lv, string&& message) : msg(message), l(lv)
-{
-#ifdef GETTIMEOFDAY
-    gettimeofday(&t, nullptr);
-#else
-    time(&t);
-#endif
-}
+logging_object::logging_object(level lv, string&& message) : msg(message), l(lv) {}
 
 void logger::init_logger()
 {

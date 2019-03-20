@@ -86,7 +86,7 @@ namespace dns
                 return -1;
             }
             uint8_t* begin = buffer;
-            memcpy(begin + 1, name, strlen(name) + 1);
+            memmove(begin + 1, name, strlen(name) + 1);
             while (true) {
                 uint8_t next_count = 0;
                 uint8_t* p = begin + 1;
@@ -114,7 +114,7 @@ namespace dns
     DnsPacket* DnsPacket::fromDataBuffer(uint8_t* _data, uint32_t _size)
     {
         auto buf = new uint8_t[_size];
-        memcpy(buf, _data, _size);
+        memmove(buf, _data, _size);
         const auto ret = new DnsPacket;
         ret->_data = buf;
         ret->_size = _size;
@@ -316,9 +316,8 @@ namespace dns
     Query::Query(uint8_t* _from)
     {
         _label_count = 0;
-        auto name_length = 0ul;
         _name = query_string_parser(_from);
-        name_length = utils::strlen(_name);
+        auto name_length = utils::strlen(_name);
 
         _type = getTwoByte(_from + name_length + 2);
         _class = getTwoByte(_from + name_length + 4);
@@ -445,7 +444,7 @@ namespace dns
         header[query_count_offset]++;
 
         query_pointer = utils::str_allocate<uint8_t>(query_length);
-        memcpy(query_pointer, buffer, query_length * sizeof(uint8_t));
+        memmove(query_pointer, buffer, query_length * sizeof(uint8_t));
         return *this;
     }
 
@@ -460,13 +459,13 @@ namespace dns
         uint16_t* ap = reinterpret_cast<uint16_t*>(header);
         ap[answer_count_offset] = htons(answer_count);
 
-        memcpy(data, header, 12);
-        memcpy(data + 12, query_pointer, query_length);
-        memcpy(data + 12 + query_length, answer_pointer, answer_length);
-        memcpy(data + 12 + query_length + answer_length, authority_pointer, authority_length);
-        memcpy(data + 12 + query_length + answer_length + authority_length,
-               additional_pointer,
-               addition_length);
+        memmove(data, header, 12);
+        memmove(data + 12, query_pointer, query_length);
+        memmove(data + 12 + query_length, answer_pointer, answer_length);
+        memmove(data + 12 + query_length + answer_length, authority_pointer, authority_length);
+        memmove(data + 12 + query_length + answer_length + authority_length,
+                additional_pointer,
+                addition_length);
 
         return ret;
     }
@@ -483,7 +482,7 @@ namespace dns
 
         answer_length = r->to_data(buffer, buffer_size, offset, answer_count, auth_count);
         answer_pointer = utils::str_allocate<uint8_t>(answer_length);
-        memcpy(answer_pointer, buffer, answer_length * sizeof(uint8_t));
+        memmove(answer_pointer, buffer, answer_length * sizeof(uint8_t));
         uint16_t* answer_rr_pointer = reinterpret_cast<uint16_t*>(header) + 3;
         *answer_rr_pointer = htons(count);
         return *this;

@@ -18,10 +18,6 @@
 
 #include "fmt/core.h"
 
-#ifdef GETTIMEOFDAY
-#include <sys/time.h>
-#endif
-
 #include <queue>
 #include <vector>
 
@@ -79,11 +75,7 @@ namespace logging
     struct logging_object {
         string msg;
         level l;
-#ifdef GETTIMEOFDAY
-        timeval t;
-#else
-        time_t t;
-#endif
+        utils::time_object t;
         logging_object(level, string&&);
 
         logging_object() {}

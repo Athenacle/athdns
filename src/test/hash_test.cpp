@@ -42,7 +42,7 @@ namespace
         using CacheNode = CacheNode_<K, V>;
 
     public:
-        LRUCache(int cache_size = 10)
+        explicit LRUCache(int cache_size = 10)
         {
             cache_size_ = cache_size;
             cache_real_size_ = 0;
@@ -53,6 +53,13 @@ namespace
             p_cache_list_near->pre = p_cache_list_head;
             p_cache_list_near->next = NULL;
         }
+        explicit LRUCache(const LRUCache<K, V> &a)
+            : cache_size_(a.cache_size), cache_real_size_(a.cache_real_size_)
+        {
+            p_cache_list_head = a.p_cache_list_head;
+            p_cache_list_near = a.p_cache_list_near;
+        }
+
         ~LRUCache()
         {
             CacheNode *p;
