@@ -21,7 +21,6 @@
 #include <sys/types.h>
 
 #include <cstring>
-#include <ctime>
 #include <functional>
 #include <utility>
 

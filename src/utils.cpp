@@ -14,7 +14,9 @@
 #include "athdns.h"
 #include "logging.h"
 
+#ifdef UNIX_HAVE_UNISTD
 #include <unistd.h>
+#endif
 
 #ifdef HAVE_OPENSSL
 #include <openssl/bio.h>
@@ -218,3 +220,59 @@ namespace utils
     }
 
 }  // namespace utils
+
+
+void time_object::operator()()
+{
+#ifdef UNIX_HAVE_CLOCK_GETTIME
+    clock_gettime(ATHDNS_CLOCK_GETTIME_FLAG, &t);
+#endif
+}
+
+time_object::time_object()
+{
+    this->operator()();
+}
+
+uint64_t time_object::diff_to_ns(const time_object &begin, const time_object &end)
+{
+    assert(begin.t.tv_sec <= end.t.tv_sec
+           || (begin.t.tv_sec == end.t.tv_sec && begin.t.tv_nsec <= end.t.tv_nsec));
+    auto s = end.t.tv_sec - begin.t.tv_sec;
+    uint64_t ret = s * 1000000000 + end.t.tv_nsec - begin.t.tv_nsec;
+    return ret;
+}
+
+double time_object::diff_to_ms(const time_object &begin, const time_object &end)
+{
+    return diff_to_ns(begin, end) / 1000000.0;
+}
+
+double time_object::diff_to_us(const time_object &begin, const time_object &end)
+{
+    return diff_to_ns(begin, end) / 1000.0;
+}
+
+time_object::time_object(const time_object &__t)
+{
+    this->t.tv_nsec = __t.t.tv_nsec;
+    this->t.tv_sec = __t.t.tv_sec;
+}
+
+bool time_object::operator==(const time_object &__t) const
+{
+    return t.tv_sec == __t.t.tv_sec;
+}
+
+time_object &time_object::operator=(time_object &&__t)
+{
+    std::swap(t, __t.t);
+    return *this;
+}
+
+void time_object::sleep_for_seconds(uint32_t s)
+{
+#ifdef UNIX_HAVE_SLEEP
+    sleep(s);
+#endif
+}

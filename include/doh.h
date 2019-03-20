@@ -24,7 +24,6 @@
 #include "record.h"
 #include "remote.h"
 
-#include <ctime>
 #ifdef HAVE_OPENSSL
 #include <openssl/bio.h>
 #include <openssl/ssl.h>
@@ -37,12 +36,6 @@
 
 using h2f = nghttp2_frame;
 using h2s = nghttp2_session;
-
-#ifdef CLOCK_REALTIME_COARSE
-#define ATHDNS_CLOCK_GETTIME_FLAG CLOCK_REALTIME_COARSE
-#else
-#define ATHDNS_CLOCK_GETTIME_FLAG CLOCK_REALTIME
-#endif
 
 namespace remote
 {
@@ -72,16 +65,15 @@ namespace remote
         struct doh_forward_item {
             int32_t stream_id;
             int32_t status_code;
-            uint64_t response_time;
-            struct timespec time;
+            double response_time;
+            utils::time_object begin_time;
             union {
                 objects::send_object *obj;
                 int32_t frame_type;
             } object;
 
-            doh_forward_item()
+            doh_forward_item() : begin_time()
             {
-                clock_gettime(ATHDNS_CLOCK_GETTIME_FLAG, &time);
                 status_code = -1;
                 response_time = 0;
             }
