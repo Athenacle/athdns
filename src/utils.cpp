@@ -73,9 +73,8 @@ namespace utils
         auto ret = new char[len + 1];
         memmove(ret, mem_buf->data, len);
         ret[len] = 0;
-        BUF_MEM_free(mem_buf);
         BIO_set_close(bio, BIO_NOCLOSE);
-        BIO_free_all(bio);
+        BIO_free(bio);
         return ret;
 #elif defined HAVE_MBEDTLS
         size_t dest_len = 1.5 * length + 5;
