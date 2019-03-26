@@ -41,6 +41,8 @@ abstract_nameserver::abstract_nameserver(uint32_t __remote_ip, int __remote_port
 
 abstract_nameserver::abstract_nameserver()
 {
+    remote_address.reset(0);
+    remote_port = 0;
     sending_lock = new pthread_mutex_t;
     pthread_mutex_init(sending_lock, nullptr);
     index = 0;
