@@ -92,7 +92,11 @@ class global_server
     int forward_type;
 
     pthread_mutex_t sending_lock;
+
+#ifdef HAVE_DOH_SUPPORT
+    pthread_mutex_t *sync_query_mutex;
     pthread_barrier_t *internal_barrier;
+#endif
 
     global_server(const global_server &) = delete;
     void operator=(const global_server &) = delete;
@@ -264,11 +268,11 @@ public:
         return current_time;
     }
 
-    ip_address *sync_internal_query_A(const char *);
-
     void config_listen_at(const char *, uint16_t);
 
 #ifdef HAVE_DOH_SUPPORT
+    ip_address *sync_internal_query_A(const char *);
+
     void add_doh_nameserver(const char *);
 #endif
 };

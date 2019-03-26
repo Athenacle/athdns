@@ -38,48 +38,45 @@ using namespace objects;
 global_server* global_server::server_instance = nullptr;
 
 //////////////////////////////////////////////////////////////////////
-
+#ifdef HAVE_DOH_SUPPORT
 ip_address* global_server::sync_internal_query_A(const char* domain)
 {
+    ip_address* ret = nullptr;
+    pthread_mutex_lock(sync_query_mutex);
     auto node = table->get(domain);
     if (node != nullptr) {
         auto a = node->get_record_A();
         if (a != nullptr) {
-            auto ret = new ip_address(*a);
+            ret = new ip_address(*a);
             TRACE("internal DNS Query, cached response: {0} -> {1}", domain, *ret);
-            return ret;
         }
-    }
-    internal_barrier = new pthread_barrier_t;
-    pthread_barrier_init(internal_barrier, nullptr, 2);
-    dns_package_builder builder;
-    dns_package_builder::basic_query_package(builder, domain);
-    DnsPacket* pack = builder.build();
-    pack->parse();
-    request* req = new request(pack);
-    uv_buf_t* buf = new_uv_buf_t();
-    buf->base = reinterpret_cast<char*>(pack->get_data());
-    buf->len = pack->get_size();
-    req->buf = buf;
-    request_pointer pointer(req);
-    forward_item* item = new forward_item(pack, pointer);
-    forward_item_submit(item);
-    pthread_barrier_wait(internal_barrier);
-    pthread_barrier_destroy(internal_barrier);
-    delete internal_barrier;
-    internal_barrier = nullptr;
+    } else {
+        dns_package_builder builder;
+        dns_package_builder::basic_query_package(builder, domain);
+        DnsPacket* pack = builder.build();
+        pack->parse();
+        request* req = new request(pack);
+        uv_buf_t* buf = new_uv_buf_t();
+        buf->base = reinterpret_cast<char*>(pack->get_data());
+        buf->len = pack->get_size();
+        req->buf = buf;
+        request_pointer pointer(req);
+        forward_item* item = new forward_item(pack, pointer);
+        forward_item_submit(item);
+        pthread_barrier_wait(internal_barrier);
 
-    node = table->get(domain);
-    if (node != nullptr) {
-        auto a = node->get_record_A();
-        if (a != nullptr) {
-            TRACE("internal DNS Query, forward response: {0} -> {1}", domain, *a);
-            return a;
+        node = table->get(domain);
+        if (node != nullptr) {
+            ret = node->get_record_A();
+            if (ret != nullptr) {
+                TRACE("internal DNS Query, forward response: {0} -> {1}", domain, *ret);
+            }
         }
     }
-    return nullptr;
+    pthread_mutex_unlock(sync_query_mutex);
+    return ret;
 }
-
+#endif
 
 void global_server::cleanup(uv_timer_t*)
 {
@@ -314,6 +311,14 @@ global_server::~global_server()
     pthread_spin_destroy(&forward_table_lock);
     pthread_mutex_destroy(response_sending_queue_lock);
 
+#ifdef HAVE_DOH_SUPPORT
+    pthread_mutex_destroy(sync_query_mutex);
+    pthread_barrier_destroy(internal_barrier);
+
+    delete internal_barrier;
+    delete sync_query_mutex;
+#endif
+
     delete response_sending_queue_lock;
     delete async_works;
     delete sending_response_works;
@@ -328,6 +333,12 @@ global_server::global_server()
       uv_udp_send_t_pool(100)
 {
     response_sending_queue_lock = new pthread_mutex_t;
+#ifdef HAVE_DOH_SUPPORT
+    sync_query_mutex = new pthread_mutex_t;
+    pthread_mutex_init(sync_query_mutex, nullptr);
+    internal_barrier = new pthread_barrier_t;
+    pthread_barrier_init(internal_barrier, nullptr, 2);
+#endif
     total_request_count = 0;
     total_request_forward_count = 0;
     timeout_requery = false;
@@ -457,14 +468,18 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
         record_node* node = pack->generate_record_node();
         cache_add_node(node);
         delete pack;
+#ifdef HAVE_DOH_SUPPORT
         if (likely(pointer->req->sock != nullptr)) {
+#endif
             forward_response* resp = new forward_response(pointer, buf);
             send_response(resp);
+#ifdef HAVE_DOH_SUPPORT
         } else {
             utils::free_buffer(buf->base);
             delete_uv_buf_t(buf);
             pthread_barrier_wait(internal_barrier);
         }
+#endif
     }
 }
 

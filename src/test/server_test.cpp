@@ -16,6 +16,7 @@
 
 #ifdef BUILD_ROOT
 
+#ifdef HAVE_DOH_SUPPORT
 TEST(server, sync_internal_query_A)
 {
     for (int i = 0; i < 2; i++) {
@@ -41,5 +42,6 @@ TEST(server, sync_internal_query_A)
         delete ips;
     }
 }
+#endif
 
 #endif
