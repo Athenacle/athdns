@@ -69,21 +69,36 @@ namespace remote
             utils::time_object begin_time;
             uv_timer_t *timer;
             doh_nameserver *remote;
-
+            enum class type { h2_frame, dns_request };
+            type forward_type;
             union {
                 objects::send_object *obj;
                 int32_t frame_type;
             } object;
 
+            ~doh_forward_item()
+            {
+                remote->single_thread_check();
+                if (0 != uv_is_active(reinterpret_cast<uv_handle_t *>(timer))) {
+                    timer_stop();
+                }
+                uv_close(reinterpret_cast<uv_handle_t *>(timer), [](uv_handle_t *h) {
+                    auto timer = reinterpret_cast<uv_timer_t *>(h);
+                    delete timer;
+                });
+            }
+
             doh_forward_item() : begin_time()
             {
+                timer = new uv_timer_t;
                 status_code = -1;
                 response_time = 0;
+                forward_type = type::dns_request;
             }
 
             void timer_start(uv_loop_t *loop, doh_nameserver *doh, int timeout = 10)
             {
-                timer = new uv_timer_t;
+                doh->single_thread_check();
                 remote = doh;
                 timer->data = this;
                 uv_timer_init(loop, timer);

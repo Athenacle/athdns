@@ -107,7 +107,7 @@ namespace
             doh->net_error_handler(doh_nameserver::error::goaway_send);
             DTRACE("{0} send. error {1}", ptr, h2_http_strerror(frame->goaway.error_code));
         }
-        if (frame->hd.type == NGHTTP2_SETTINGS) {
+        if (frame->hd.type == NGHTTP2_SETTINGS && frame->settings.hd.flags != NGHTTP2_FLAG_ACK) {
             doh->h2_send_special_frame(frame->hd.stream_id, NGHTTP2_SETTINGS);
         }
         return 0;
@@ -249,10 +249,15 @@ namespace remote
             || status == doh_nameserver::ssl_state::closed) {
             TRACE("ssl reconnecting...");
             doh->start();
-        } else if (doh->state_check_counter++ % DOH_KEEP_ALIVE_TIMEOUT == 0) {
-            doh->ssl_renegotiate_worker();
-            if (doh->h2_status == doh_nameserver::h2_state::established) {
+        } else {
+            if (nghttp2_session_want_write(doh->session)) {
                 nghttp2_session_send(doh->session);
+            }
+            if (doh->state_check_counter++ % DOH_KEEP_ALIVE_TIMEOUT == 0) {
+                doh->ssl_renegotiate_worker();
+                if (doh->h2_status == doh_nameserver::h2_state::established) {
+                    nghttp2_session_send(doh->session);
+                }
             }
         }
     }
@@ -680,6 +685,9 @@ void doh_nameserver::read(uv_stream_t*, ssize_t size, const uv_buf_t* buf)
             __openssl_check(ret);
         } else {
             nghttp2_session_mem_recv(session, buffer, ret);
+            if (nghttp2_session_want_write(session)) {
+                nghttp2_session_send(session);
+            }
         }
     }
     utils::free_buffer(buf->base);
@@ -701,7 +709,7 @@ void doh_nameserver::ssl_fatal_error(int ec)
         return;
     }
     auto buf = utils::get_buffer();
-    ERROR("ssl fatal error. {0}", buf);
+    ERROR("ssl fatal error. {0}", ec);
     utils::free_buffer(buf);
 }
 
@@ -739,7 +747,13 @@ void doh_nameserver::net_error_handler()
         ssl_status = ssl_state::closed;
         h2_status = h2_state::closed;
     }
-    std::for_each(forward_table.cbegin(), forward_table.cend(), [](auto& p) { delete p.second; });
+    std::for_each(forward_table.cbegin(), forward_table.cend(), [](auto& p) {
+        if (p.second->forward_type == doh_forward_item::type::dns_request) {
+            delete p.second->object.obj;
+        }
+        p.second->timer_stop();
+        delete p.second;
+    });
     forward_table.clear();
     restart_doh();
 }
@@ -795,6 +809,7 @@ void doh_nameserver::recv_response_header(int sid, int sc)
         return;
     } else {
         itor->second->status_code = sc;
+        itor->second->timer_stop();
         if (sc != 200) {
             if (sc > 500) {
                 WARN("receive http status code {0} return from stream id {1}", sc, sid);
@@ -821,7 +836,7 @@ void doh_nameserver::recv_response(int sid)
         auto p = itor->second;
         if (p->response_time == 0) {
             utils::time_object current;
-            p->response_time = utils::time_object::diff_to_ms(current, itor->second->begin_time);
+            p->response_time = utils::time_object::diff_to_ms(itor->second->begin_time, current);
         }
     }
 }
@@ -835,9 +850,6 @@ void doh_nameserver::h2_stream_close(int stream_id)
         DTRACE("h2 request for stream {0} closed, cost time {1:2.2f} ms",
                stream_id,
                itor->second->response_time);
-        itor->second->timer_stop();
-        delete itor->second;
-        forward_table.erase(itor);
     }
 }
 
@@ -862,6 +874,11 @@ void doh_nameserver::h2_submit_data(int stream_id, const uint8_t* data, size_t l
             uvbuf->len = len;
             global_server::get_server().response_from_remote(uvbuf, this);
         }
+        assert(itor->second->forward_type == doh_forward_item::type::dns_request);
+        itor->second->timer_stop();
+        delete itor->second->object.obj;
+        delete itor->second;
+        forward_table.erase(itor);
     }
 }
 namespace
@@ -875,30 +892,30 @@ namespace
 
 void doh_nameserver::h2_send_special_frame(int32_t id, int32_t type)
 {
+    single_thread_check();
     doh_forward_item* item = new doh_forward_item;
     item->object.frame_type = type;
     item->stream_id = id;
+    item->forward_type = doh_forward_item::type::h2_frame;
     item->timer_start(get_loop(), this);
     forward_table.insert({__calc_id(id, type), item});
 }
 
 void doh_nameserver::h2_recv_special_frame(int32_t id, int32_t type)
 {
+    single_thread_check();
     auto key = __calc_id(id, type);
     auto itor = forward_table.find(key);
-    if (itor == forward_table.end()) {
-        WARN("unexecpted special frame received stream_id {0}, type {1}",
-             id,
-             __dispatch_nghttp2_frame_type(type));
-    } else {
-        itor->second->timer_stop();
-        delete itor->second;
-        forward_table.erase(itor);
-    }
+    assert(itor != forward_table.end());
+    assert(itor->second->forward_type == doh_forward_item::type::h2_frame);
+    itor->second->timer_stop();
+    delete itor->second;
+    forward_table.erase(itor);
 }
 
 void doh_nameserver::forward_item_timeout(doh_forward_item* item)
 {
+    single_thread_check();
     WARN("timeout for frame {0}, type {1} ",
          item->stream_id,
          __dispatch_nghttp2_frame_type(item->object.frame_type));
@@ -906,10 +923,13 @@ void doh_nameserver::forward_item_timeout(doh_forward_item* item)
         nghttp2_submit_goaway(session, NGHTTP2_FLAG_NONE, 0, NGHTTP2_SETTINGS_TIMEOUT, nullptr, 0);
         nghttp2_session_send(session);
         net_error_handler(error::h2_timeout);
-    }
-    auto key = __calc_id(item->stream_id, item->object.frame_type);
-    auto itor = forward_table.find(key);
-    if (itor != forward_table.end()) {
+    } else {
+        auto key = item->forward_type == doh_forward_item::type::h2_frame
+                       ? __calc_id(item->stream_id, item->object.frame_type)
+                       : item->stream_id;
+        auto itor = forward_table.find(key);
+        assert(itor != forward_table.end());
+        assert(itor->second == item);
         forward_table.erase(itor);
         delete item;
     }
