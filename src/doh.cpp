@@ -94,6 +94,7 @@ namespace
     int h2cb_before_frame_send(h2s*, const h2f* frame, void* user_data)
     {
         const char* ptr = __dispatch_nghttp2_frame_type(frame->hd.type);
+        auto doh = to_doh(user_data);
         int id = frame->hd.stream_id;
         if (frame->hd.type == NGHTTP2_DATA && frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
             DTRACE("entire DATA send for stream {0}", id);
@@ -103,9 +104,11 @@ namespace
                 "before frame {2} send. TYPE {0} {1}", ptr, frame->hd.flags == 1 ? "ACK" : "", id);
         }
         if (frame->hd.type == NGHTTP2_GOAWAY) {
-            auto doh = to_doh(user_data);
             doh->net_error_handler(doh_nameserver::error::goaway_send);
             DTRACE("{0} send. error {1}", ptr, h2_http_strerror(frame->goaway.error_code));
+        }
+        if (frame->hd.type == NGHTTP2_SETTINGS && frame->settings.hd.flags != NGHTTP2_FLAG_ACK) {
+            doh->h2_send_special_frame(frame->hd.stream_id, NGHTTP2_SETTINGS);
         }
         return 0;
     }
@@ -212,7 +215,6 @@ namespace remote
             doh->h2_submit_data_finish(id);
             nghttp2_submit_rst_stream(
                 doh->session, NGHTTP2_FLAG_NONE, frame->hd.stream_id, NGHTTP2_NO_ERROR);
-            nghttp2_session_send(doh->session);
         } else {
             doh->recv_response(id);
         }
@@ -227,6 +229,9 @@ namespace remote
             doh->net_error_handler(doh_nameserver::error::goaway_recv);
             DTRACE("{0} received: {1}", ptr, h2_http_strerror(frame->goaway.error_code));
         }
+        if (type == NGHTTP2_SETTINGS && frame->settings.hd.flags == NGHTTP2_FLAG_ACK) {
+            doh->h2_recv_special_frame(id, NGHTTP2_SETTINGS);
+        }
         return 0;
     }
 
@@ -239,18 +244,21 @@ namespace remote
     void uvcb_ssl_check(uv_timer_t* timer)
     {
         auto doh = to_doh(timer->data);
-        if (doh->state_check_counter++ % DOH_KEEP_ALIVE_TIMEOUT == 0) {
-            auto status = doh->ssl_status;
-            if (status == doh_nameserver::ssl_state::not_init
-                || status == doh_nameserver::ssl_state::closed) {
-                TRACE("ssl reconnecting...");
-                doh->start();
-            } else {
-                doh->ssl_renegotiate_worker();
+        auto status = doh->ssl_status;
+        if (status == doh_nameserver::ssl_state::not_init
+            || status == doh_nameserver::ssl_state::closed) {
+            TRACE("ssl reconnecting...");
+            doh->start();
+        } else {
+            if (nghttp2_session_want_write(doh->session)) {
+                nghttp2_session_send(doh->session);
             }
-        }
-        if (doh->h2_status == doh_nameserver::h2_state::established) {
-            nghttp2_session_send(doh->session);
+            if (doh->state_check_counter++ % DOH_KEEP_ALIVE_TIMEOUT == 0) {
+                doh->ssl_renegotiate_worker();
+                if (doh->h2_status == doh_nameserver::h2_state::established) {
+                    nghttp2_session_send(doh->session);
+                }
+            }
         }
     }
 
@@ -456,21 +464,6 @@ void doh_nameserver::ssl_renegotiate_worker()
     nghttp2_session_send(session);
 }
 
-void send_complete_cb(uv_write_t* req, int flag)
-{
-    if (unlikely(flag < 0 && flag != UV_EPIPE)) {
-        ERROR("send package failed: {0}", uv_strerror(flag));
-    }
-    auto buf = reinterpret_cast<uv_buf_t*>(req->data);
-    if (unlikely(buf->len > recv_buffer_size)) {
-        delete[] buf->base;
-    } else {
-        utils::free_buffer(buf->base);
-    }
-    global_server::get_server().delete_uv_buf_t(buf);
-    delete req;
-}
-
 void remote::uvcb_doh_send(uv_async_t* t)
 {
     auto doh = to_doh(t->data);
@@ -611,6 +604,7 @@ void doh_nameserver::do_send(objects::send_object* obj)
         item->object.obj = obj;
         item->stream_id = id;
         forward_table.insert({id, item});
+        item->timer_start(get_loop(), this, 20);
         nghttp2_session_send(session);
         clock_gettime(ATHDNS_CLOCK_GETTIME_FLAG, &last_sent);
     }
@@ -665,18 +659,6 @@ void doh_nameserver::send(const uint8_t* buf, size_t s)
             send(uvbuffer);
         }
     }
-    do {
-        const size_t buffer_size = recv_buffer_size;
-        uint8_t buffer[buffer_size];
-        ret = SSL_read(ssl, buffer, recv_buffer_size);
-        if (ret > 0) {
-            nghttp2_session_mem_recv(session, buffer, ret);
-            nghttp2_session_send(session);
-            if (ret == buffer_size) {
-                continue;
-            }
-        }
-    } while (false);
 }
 
 void doh_nameserver::read(uv_stream_t*, ssize_t size, const uv_buf_t* buf)
@@ -699,11 +681,13 @@ void doh_nameserver::read(uv_stream_t*, ssize_t size, const uv_buf_t* buf)
         __openssl_read_check_state(size, buf);
     } else {
         int ret = SSL_read(ssl, buffer, sizeof(buffer));
-        if (ret < 0) {
+        if (ret <= 0) {
             __openssl_check(ret);
         } else {
             nghttp2_session_mem_recv(session, buffer, ret);
-            nghttp2_session_send(session);
+            if (nghttp2_session_want_write(session)) {
+                nghttp2_session_send(session);
+            }
         }
     }
     utils::free_buffer(buf->base);
@@ -725,7 +709,7 @@ void doh_nameserver::ssl_fatal_error(int ec)
         return;
     }
     auto buf = utils::get_buffer();
-    ERROR("ssl fatal error. {0}", buf);
+    ERROR("ssl fatal error. {0}", ec);
     utils::free_buffer(buf);
 }
 
@@ -754,12 +738,23 @@ void doh_nameserver::net_error_handler()
 {
     if (current_error == error::none_error) {
         return;
+    } else if (current_error == error::h2_timeout) {
     } else if (current_error == error::goaway_send || current_error == error::goaway_recv) {
         ssl_status = ssl_state::closed;
         h2_status = h2_state::closed;
     } else if (current_error == error::rst_recv || current_error == error::fin_recv) {
         TRACE("TCP RST/FIN received, restart ");
+        ssl_status = ssl_state::closed;
+        h2_status = h2_state::closed;
     }
+    std::for_each(forward_table.cbegin(), forward_table.cend(), [](auto& p) {
+        if (p.second->forward_type == doh_forward_item::type::dns_request) {
+            delete p.second->object.obj;
+        }
+        p.second->timer_stop();
+        delete p.second;
+    });
+    forward_table.clear();
     restart_doh();
 }
 
@@ -814,6 +809,7 @@ void doh_nameserver::recv_response_header(int sid, int sc)
         return;
     } else {
         itor->second->status_code = sc;
+        itor->second->timer_stop();
         if (sc != 200) {
             if (sc > 500) {
                 WARN("receive http status code {0} return from stream id {1}", sc, sid);
@@ -840,7 +836,7 @@ void doh_nameserver::recv_response(int sid)
         auto p = itor->second;
         if (p->response_time == 0) {
             utils::time_object current;
-            p->response_time = utils::time_object::diff_to_ms(current, itor->second->begin_time);
+            p->response_time = utils::time_object::diff_to_ms(itor->second->begin_time, current);
         }
     }
 }
@@ -854,8 +850,6 @@ void doh_nameserver::h2_stream_close(int stream_id)
         DTRACE("h2 request for stream {0} closed, cost time {1:2.2f} ms",
                stream_id,
                itor->second->response_time);
-        delete itor->second;
-        forward_table.erase(itor);
     }
 }
 
@@ -880,5 +874,63 @@ void doh_nameserver::h2_submit_data(int stream_id, const uint8_t* data, size_t l
             uvbuf->len = len;
             global_server::get_server().response_from_remote(uvbuf, this);
         }
+        assert(itor->second->forward_type == doh_forward_item::type::dns_request);
+        itor->second->timer_stop();
+        delete itor->second->object.obj;
+        delete itor->second;
+        forward_table.erase(itor);
+    }
+}
+namespace
+{
+    int64_t __calc_id(int32_t id, uint32_t type)
+    {
+        auto key = 0x0ff0000000000000 | static_cast<int64_t>(type) << 32 | id;
+        return key;
+    }
+}  // namespace
+
+void doh_nameserver::h2_send_special_frame(int32_t id, int32_t type)
+{
+    single_thread_check();
+    doh_forward_item* item = new doh_forward_item;
+    item->object.frame_type = type;
+    item->stream_id = id;
+    item->forward_type = doh_forward_item::type::h2_frame;
+    item->timer_start(get_loop(), this);
+    forward_table.insert({__calc_id(id, type), item});
+}
+
+void doh_nameserver::h2_recv_special_frame(int32_t id, int32_t type)
+{
+    single_thread_check();
+    auto key = __calc_id(id, type);
+    auto itor = forward_table.find(key);
+    assert(itor != forward_table.end());
+    assert(itor->second->forward_type == doh_forward_item::type::h2_frame);
+    itor->second->timer_stop();
+    delete itor->second;
+    forward_table.erase(itor);
+}
+
+void doh_nameserver::forward_item_timeout(doh_forward_item* item)
+{
+    single_thread_check();
+    WARN("timeout for frame {0}, type {1} ",
+         item->stream_id,
+         __dispatch_nghttp2_frame_type(item->object.frame_type));
+    if (item->object.frame_type == NGHTTP2_SETTINGS) {
+        nghttp2_submit_goaway(session, NGHTTP2_FLAG_NONE, 0, NGHTTP2_SETTINGS_TIMEOUT, nullptr, 0);
+        nghttp2_session_send(session);
+        net_error_handler(error::h2_timeout);
+    } else {
+        auto key = item->forward_type == doh_forward_item::type::h2_frame
+                       ? __calc_id(item->stream_id, item->object.frame_type)
+                       : item->stream_id;
+        auto itor = forward_table.find(key);
+        assert(itor != forward_table.end());
+        assert(itor->second == item);
+        forward_table.erase(itor);
+        delete item;
     }
 }

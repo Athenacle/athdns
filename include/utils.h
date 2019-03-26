@@ -163,7 +163,7 @@ namespace utils
         struct __entry_map {
             bool used;
         };
-        pthread_spinlock_t *mutex;
+        pthread_mutex_t *mutex;
         std::queue<pointer> empty_queue;
         std::unordered_map<pointer, __entry_map> pool_map;
 #ifndef NDEBUG
@@ -173,12 +173,12 @@ namespace utils
 #endif
         void lock() const
         {
-            pthread_spin_lock(mutex);
+            pthread_mutex_lock(mutex);
         }
 
         void unlock() const
         {
-            pthread_spin_unlock(mutex);
+            pthread_mutex_unlock(mutex);
         }
 
         void resize(size_t s)
@@ -228,7 +228,7 @@ namespace utils
                 free(ptr);
             });
             unlock();
-            pthread_spin_destroy(mutex);
+            pthread_mutex_destroy(mutex);
             delete mutex;
         }
 
@@ -237,8 +237,8 @@ namespace utils
             : allocated_count(0), max_allocated(0)
 #endif
         {
-            mutex = new pthread_spinlock_t;
-            pthread_spin_init(mutex, PTHREAD_PROCESS_PRIVATE);
+            mutex = new pthread_mutex_t;
+            pthread_mutex_init(mutex, nullptr);
             resize(size);
         }
 
@@ -307,6 +307,8 @@ namespace utils
 
         ~allocator_pool() {}
 
+        void for_each(std::function<void(const pointer)>) {}
+
         template <unsigned int _N = N, class... Args>
         std::enable_if_t<(_N >= 2), pointer> allocate() const
         {
@@ -314,9 +316,9 @@ namespace utils
         }
 
         template <unsigned int _N = N, class... Args>
-        std::enable_if_t<(_N == 1), pointer> allocate(const Args &... __args) const
+        std::enable_if_t<(_N == 1), pointer> allocate(Args... __args) const
         {
-            return new value_type(__args...);
+            return new value_type(std::forward<Args>(__args)...);
         }
 
         template <unsigned int _N = N>
