@@ -67,6 +67,9 @@ namespace remote
             int32_t status_code;
             double response_time;
             utils::time_object begin_time;
+            uv_timer_t *timer;
+            doh_nameserver *remote;
+
             union {
                 objects::send_object *obj;
                 int32_t frame_type;
@@ -77,7 +80,28 @@ namespace remote
                 status_code = -1;
                 response_time = 0;
             }
+
+            void timer_start(uv_loop_t *loop, doh_nameserver *doh, int timeout = 10)
+            {
+                timer = new uv_timer_t;
+                remote = doh;
+                timer->data = this;
+                uv_timer_init(loop, timer);
+                uv_timer_start(timer,
+                               [](uv_timer_t *timer) {
+                                   auto item = reinterpret_cast<doh_forward_item *>(timer->data);
+                                   item->remote->forward_item_timeout(item);
+                               },
+                               timeout * 1000,
+                               0);
+            }
+
+            void timer_stop()
+            {
+                uv_timer_stop(timer);
+            }
         };
+
         static std::vector<doh_nameserver *> doh_servers;
 
         pthread_mutex_t *state_lock;
@@ -107,7 +131,7 @@ namespace remote
         utils::atomic_int ssl_version;
         utils::atomic_number<uint8_t> retry;
 
-        std::unordered_map<int, doh_forward_item *> forward_table;
+        std::unordered_map<int64_t, doh_forward_item *> forward_table;
         std::queue<objects::send_object *> request_queue;
 
         void send(uv_buf_t *);
@@ -175,7 +199,8 @@ namespace remote
         enum class error {
             none_error,
             goaway_send,
-            goaway_recv,  // h2 error
+            goaway_recv,
+            h2_timeout,  // h2 error
             fin_recv,
             rst_recv,
             other
@@ -190,11 +215,16 @@ namespace remote
 
         void net_error_handler();
 
+        void forward_item_timeout(doh_forward_item *);
+
         struct timespec last_sent;
 
     public:
         doh_nameserver(const char *u);
         virtual ~doh_nameserver();
+
+        void h2_send_special_frame(int32_t, int32_t);
+        void h2_recv_special_frame(int32_t, int32_t);
 
         virtual void send(objects::send_object *) override;
         void send(const uint8_t *, size_t);
