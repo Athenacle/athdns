@@ -34,9 +34,9 @@ namespace objects
         const sockaddr *sock;
         dns::DnsPacket *pack;
         uv_udp_t *udp;
+        request(dns::DnsPacket *p) : pack(p) {}
 
-        request(const uv_buf_t *, ssize_t, const sockaddr *, uv_udp_t *);
-        request(dns::DnsPacket *);
+        request(const uv_buf_t *, ssize_t, const sockaddr *, uv_udp_t *, dns::DnsPacket *p);
 
         ~request();
     };

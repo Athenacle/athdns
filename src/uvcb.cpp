@@ -53,19 +53,26 @@ void uvcb_server_incoming_recv(
         return;
     }
 
-    auto req = new objects::request(buf, nread, addr, udp);
+    dns::dns_parse_status status;
+    DnsPacket* pack = DnsPacket::fromDataBuffer(buf, status);
+    if (status == dns_parse_status::request_ok) {
+        assert(pack != nullptr);
+        auto req = new objects::request(buf, nread, addr, udp, pack);
+        uv_work_t* work = new uv_work_t;
+        work->data = req;
 
-    uv_work_t* work = new uv_work_t;
-    work->data = req;
-
-    uv_queue_work(loop, work, uvcb_incoming_request_worker, [](uv_work_t* work, int) {
-        if (unlikely(work->data == nullptr)) {
-            //NOTE: when STOP string "stop.dnsserver.ok" received, work->data will be
-            //      set to nullptr. Please refer to `uvcb_incoming_request_worker'
-            global_server::get_server().do_stop();
-        }
-        delete work;
-    });
+        uv_queue_work(loop, work, uvcb_incoming_request_worker, [](uv_work_t* work, int) {
+            if (unlikely(work->data == nullptr)) {
+                //NOTE: when STOP string "stop.dnsserver.ok" received, work->data will be
+                //      set to nullptr. Please refer to `uvcb_incoming_request_worker'
+                global_server::get_server().do_stop();
+            }
+            delete work;
+        });
+    } else {
+        TRACE("malformed packet received");
+        utils::free_buffer(buf->base);
+    }
 }
 
 void uvcb_incoming_request_worker(uv_work_t* work)
@@ -76,10 +83,8 @@ void uvcb_incoming_request_worker(uv_work_t* work)
     server.increase_request();
     request* req = reinterpret_cast<request*>(work->data);
 
-    DnsPacket* pack =
-        DnsPacket::fromDataBuffer(reinterpret_cast<uint8_t*>(req->buf->base), req->nsize);
+    DnsPacket* pack = req->pack;
 
-    pack->parse();
     auto name = pack->getQuery().getName();
     if (unlikely(strcmp(name, "stop.dnsserver.ok") == 0)) {
         delete req;
@@ -100,7 +105,6 @@ void uvcb_incoming_request_worker(uv_work_t* work)
             DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
             found_response* fitem = new found_response(ret, pointer);
             server.send_response(fitem);
-            delete pack;
         }
     }
 }

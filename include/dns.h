@@ -169,6 +169,11 @@ namespace dns
 
         explicit Query(uint8_t *);
 
+        Query(const char *name, uint16_t type, uint16_t clazz)
+            : _type(type), _class(clazz), _name(name)
+        {
+        }
+
         Query()
         {
             _type = _class = _label_count = 0;
@@ -193,6 +198,16 @@ namespace dns
         {
             return _name;
         }
+    };
+
+    enum class dns_parse_status {
+        request_ok,
+        response_ok,
+        format_error,
+        query_type_error,
+        query_class_error,
+        query_name_error,
+        number_error
     };
 
     class DnsPacket
@@ -225,8 +240,12 @@ namespace dns
 
         Query _query;
 
+        void swap(DnsPacket &&);
+
     public:
         ~DnsPacket();
+
+        static DnsPacket *fromDataBuffer(const uv_buf_t *, dns_parse_status &);
 
         static DnsPacket *fromDataBuffer(uint8_t *, uint32_t);
         static DnsPacket *fromDataBuffer(uv_buf_t *);

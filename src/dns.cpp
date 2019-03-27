@@ -43,6 +43,53 @@ namespace dns
             return utils::check_ip_address(ip, ret);
         }
 
+        const char* query_string_parser(uint8_t* begin,
+                                        uint8_t* buffer,
+                                        uint8_t* buffer_end,
+                                        uint32_t& length)
+        {
+            length = 0;
+            auto ptr = begin;
+            do {
+                if (unlikely(ptr > buffer_end)) {
+                    return nullptr;
+                }
+                if (unlikely(*ptr >= 0x80)) {
+                    return nullptr;
+                }
+                if (unlikely((*ptr >> 4) == 0xc)) {
+                    assert(buffer != nullptr);
+                    ptr = buffer + ((*ptr & 0x3f) + *(ptr + 1));
+                }
+                length = length + *ptr + 1;
+                ptr = ptr + *ptr + 1;
+            } while (*ptr != 0x00);
+
+            char* ret = new char[length + 1];
+            char* pointer = ret;
+            ptr = begin;
+            do {
+                if (unlikely((*ptr >> 4) == 0xc)) {
+                    assert(buffer != nullptr);
+                    ptr = buffer + ((*ptr & 0x3f) + *(ptr + 1));
+                }
+                auto count = *ptr;
+                ptr++;
+                while (count > 0) {
+                    if (unlikely(!isalnum(*ptr))) {
+                        return nullptr;
+                    }
+                    *pointer = tolower(*ptr);
+                    pointer++;
+                    ptr++;
+                    count--;
+                }
+                *pointer = '.';
+                pointer++;
+            } while (*ptr != 0x00);
+            *(pointer - 1) = 0;
+            return ret;
+        }
 
         const char* query_string_parser(uint8_t* begin, uint8_t* buffer)
         {
@@ -105,6 +152,80 @@ namespace dns
 
     }  // namespace dns_utils
 
+    DnsPacket* DnsPacket::fromDataBuffer(const uv_buf_t* buf, dns_parse_status& status)
+    {
+        status = dns_parse_status::format_error;
+        uint8_t* start = reinterpret_cast<uint8_t*>(buf->base);
+        uint8_t* end = reinterpret_cast<uint8_t*>(buf->base + buf->len);
+        if (unlikely(buf->len <= 12)) {
+            status = dns_parse_status::format_error;
+            return nullptr;
+        }
+        DnsPacket pack;
+        pack._data = new uint8_t[buf->len];
+        memmove(pack._data, start, buf->len);
+        pack._flag = pack.getFlag();
+        pack.flag_pointer = pack._data + 2;
+        pack._id = pack.getQueryID();
+        const int DNS_FLAG_Z = 9;
+        if (flag_is_set(pack.flag_pointer, DNS_FLAG_Z)) {
+            status = dns_parse_status::format_error;
+            return nullptr;
+        }
+        bool is_response = pack.isResponse();
+        auto oc = pack.getOPCode();
+        if (unlikely(oc >= DNS_OPCODE_SERVER_STATUS)) {
+            status = dns_parse_status::format_error;
+            return nullptr;
+        }
+        auto qcount = pack.getQuestionCount();
+        if (unlikely(qcount != 1)) {
+            status = dns_parse_status::number_error;
+            return nullptr;
+        }
+        auto acount = pack.getAnswerRRCount();
+        if (likely(!is_response)) {
+            auto authorcount = pack.getAuthorityRRCount();
+            if (unlikely(acount > 0 || authorcount > 0)) {
+                status = dns_parse_status::number_error;
+                return nullptr;
+            }
+            auto rc = pack.getReturnCode();
+            if (unlikely(rc != DNS_RCODE_NOERROR)) {
+                status = dns_parse_status::format_error;
+                return nullptr;
+            }
+        }
+        uint32_t length;
+        auto name = query_string_parser(
+            start + DNS_FORMAT_HEADER_LENGTH, start + DNS_FORMAT_HEADER_LENGTH, end, length);
+        if (unlikely((start + length + 4) > end)) {
+            return nullptr;
+        }
+        uint16_t* type_pointer =
+            reinterpret_cast<uint16_t*>(start + length + DNS_FORMAT_HEADER_LENGTH + 1);
+        auto type = htons(*type_pointer);
+        auto clazz = htons(*(type_pointer + 1));
+        if (type > DNS_TYPE_TXT) {
+            delete[] name;
+            return nullptr;
+        }
+        if (unlikely(clazz != DNS_CLASS_IN)) {
+            delete[] name;
+            return nullptr;
+        }
+        Query q(name, type, clazz);
+        std::swap(pack._query, (q));
+        if (is_response) {
+            status = dns_parse_status::response_ok;
+        } else {
+            status = dns_parse_status::request_ok;
+        }
+        pack.parsed = true;
+        auto ret = new DnsPacket;
+        ret->swap(std::move(pack));
+        return ret;
+    }
 
     DnsPacket* DnsPacket::fromDataBuffer(uv_buf_t* buf)
     {
@@ -123,9 +244,10 @@ namespace dns
 
     DnsPacket::~DnsPacket()
     {
-        delete[] _data;
+        if (unlikely(_data != nullptr)) {
+            delete[] _data;
+        }
     }
-
 
     uint16_t DnsPacket::getQueryID() const
     {
@@ -163,7 +285,6 @@ namespace dns
         test_flag();
         return (_flag >> 11) & 0x0f;
     }
-
 
     bool DnsPacket::isAA() const
     {
@@ -293,6 +414,17 @@ namespace dns
         return node;
     }
 
+    void DnsPacket::swap(DnsPacket&& pack)
+    {
+        std::swap(pack._data, _data);
+        std::swap(pack._size, _size);
+        std::swap(pack.flag_pointer, flag_pointer);
+        std::swap(pack._id, _id);
+        std::swap(pack._flag, _flag);
+        std::swap(pack._query, _query);
+        std::swap(pack.parsed, parsed);
+    }
+
     int Query::query_section_builder(
         domain_name dname, uint8_t* buf, size_t buf_size, uint16_t type, uint16_t clazz)
     {
@@ -325,12 +457,13 @@ namespace dns
 
     Query::~Query()
     {
-        delete[] _name;
+        if (unlikely((_name != nullptr))) {
+            delete[] _name;
+        }
     }
 
     const uint8_t Query::QUERY_CLASS_IN = 1;
     const uint8_t Query::QUERY_TYPE_A = 1;
-
 
     // dns_package_builder
 
