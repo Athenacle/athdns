@@ -88,23 +88,23 @@ void uvcb_incoming_request_worker(uv_work_t* work)
     auto name = pack->getQuery().getName();
     if (unlikely(strcmp(name, "stop.dnsserver.ok") == 0)) {
         delete req;
-        delete pack;
         work->data = nullptr;
     } else {
         auto id = pack->getQueryID();
         record_node* found = table.get(name);
-        request_pointer pointer(req);
         if (found == nullptr) {
             DTRACE("IN request:  ID #{0:x} -> {1}. NOT Found", id, name);
-            forward_item* fitem = new forward_item(pack, pointer);
+            forward_response* fitem = new forward_response(req);
             server.forward_item_submit(fitem);
         } else {
             string text;
             found->to_string(text);
             DTRACE("IN request:  ID #{0:x} -> {1} : {2}", id, name, text);
             DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
-            found_response* fitem = new found_response(ret, pointer);
-            server.send_response(fitem);
+            response* fitem = new response(req);
+            fitem->set_response(reinterpret_cast<char*>(ret->get_data()), ret->get_size());
+            std::unique_ptr<response> ptr(fitem);
+            server.send_response(std::move(ptr));
         }
     }
 }

@@ -28,7 +28,7 @@ namespace remote
     class abstract_nameserver
     {
     protected:
-        using sending_item_type = std::pair<uint16_t, objects::forward_item_pointer>;
+        using sending_item_type = std::pair<uint16_t, std::weak_ptr<objects::forward_response>>;
 
     private:
         sockaddr_in *sock;
@@ -42,7 +42,7 @@ namespace remote
         ip_address remote_address;
 
     protected:
-        std::map<uint16_t, objects::forward_item_pointer> sending;
+        std::map<uint16_t, std::weak_ptr<objects::forward_response>> sending;
         utils::atomic_int request_forward_count;
         utils::atomic_int response_count;
 

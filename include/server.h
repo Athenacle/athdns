@@ -47,14 +47,16 @@ class global_server
     using static_address_type = std::tuple<string, uint32_t>;
     using queue_item = std::tuple<uv_buf_t *, const sockaddr *, ssize_t>;
 
+    using forward_object = std::weak_ptr<objects::forward_response>;
+
     std::vector<std::tuple<const char *, uint16_t, sockaddr *, uv_udp_t *>> listen_address;
 
     std::vector<remote::abstract_nameserver *> remote_address;
     std::vector<static_address_type> *static_address;
 
-    std::unordered_map<uint16_t, objects::forward_item_pointer> forward_table;
+    std::unordered_map<uint16_t, std::shared_ptr<objects::forward_response>> forward_table;
 
-    std::queue<objects::response *> response_sending_queue;
+    std::queue<std::shared_ptr<objects::response>> response_sending_queue;
 
     pthread_mutex_t *response_sending_queue_lock;
 
@@ -107,7 +109,7 @@ class global_server
 
     static global_server *server_instance;
 
-    void forward_item_all(objects::forward_item_pointer &);
+    void forward_item_all(forward_object);
 
 #define ADD_ALLOCATOR_POOL(__type)                \
 private:                                          \
@@ -138,14 +140,14 @@ private:
     void init_ssl_libraries();
 
 public:
-    void send_response(objects::response *);
+    void send_response(std::shared_ptr<objects::response>);
 
     uv_loop_t *get_main_loop()
     {
         return uv_main_loop;
     }
 
-    void forward_item_submit(objects::forward_item *);
+    void forward_item_submit(objects::forward_response *);
 
     void send(objects::send_object *);
 

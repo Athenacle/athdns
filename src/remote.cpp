@@ -83,19 +83,7 @@ bool abstract_nameserver::init_socket()
 
 int abstract_nameserver::clean_sent()
 {
-    int count = 0;
-    pthread_mutex_lock(sending_lock);
-    const auto& end = sending.end();
-    for (auto itor = sending.begin(); itor != end;) {
-        if (itor->second->get_response_send()) {
-            itor = sending.erase(itor);
-            count++;
-        } else {
-            ++itor;
-        }
-    }
-    pthread_mutex_unlock(sending_lock);
-    return count;
+    return 0;
 }
 
 void abstract_nameserver::insert_sending(const sending_item_type& pair)

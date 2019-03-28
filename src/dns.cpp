@@ -214,16 +214,16 @@ namespace dns
             delete[] name;
             return nullptr;
         }
+        auto ret = new DnsPacket;
+        ret->swap(std::move(pack));
         Query q(name, type, clazz);
-        std::swap(pack._query, (q));
+        std::swap(ret->_query, q);
         if (is_response) {
             status = dns_parse_status::response_ok;
         } else {
             status = dns_parse_status::request_ok;
         }
         pack.parsed = true;
-        auto ret = new DnsPacket;
-        ret->swap(std::move(pack));
         return ret;
     }
 

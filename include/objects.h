@@ -34,28 +34,39 @@ namespace objects
         const sockaddr *sock;
         dns::DnsPacket *pack;
         uv_udp_t *udp;
-        request(dns::DnsPacket *p) : pack(p) {}
+        request(dns::DnsPacket *p) : pack(p)
+        {
+            sock = nullptr;
+        }
 
         request(const uv_buf_t *, ssize_t, const sockaddr *, uv_udp_t *, dns::DnsPacket *p);
 
         ~request();
+        void set_forward_id(uint16_t fid)
+        {
+            *reinterpret_cast<uint16_t *>(buf->base) = htons(fid);
+        }
     };
 
     using request_pointer = std::shared_ptr<request>;
 
     class response
     {
-        request_pointer req;
-
     protected:
         uv_buf_t *response_buffer;
+        request *req;
 
     public:
-        response(const request_pointer &);
+        response(request *);
 
         virtual ~response();
 
-        const request_pointer &get_request() const
+        const request *get_request() const
+        {
+            return req;
+        }
+
+        request *get_request()
         {
             return req;
         }
@@ -69,79 +80,40 @@ namespace objects
         {
             return req->sock;
         }
+
+        virtual void set_response(char *, uint32_t);
     };
 
-    class found_response : public response
+    class forward_response : public response
     {
-        dns::DnsPacket *packet;
-
-    public:
-        found_response(dns::DnsPacket *, const request_pointer &);
-
-        virtual ~found_response();
-    };
-
-    struct forward_item {
-        request_pointer req;
-
-        dns::DnsPacket *pack;
-
         uint16_t forward_id;
         uint16_t origin_id;
-        pthread_spinlock_t _lock;
 
-        bool response_send;
-
-        void lock()
+    public:
+        uint16_t get_original_id() const
         {
-            pthread_spin_lock(&_lock);
+            return origin_id;
         }
 
-        void unlock()
+        forward_response(request *req) : response(req)
         {
-            pthread_spin_unlock(&_lock);
+            origin_id = htons(*reinterpret_cast<uint16_t *>(req->buf->base));
         }
 
-
-        void set_response_send()
+        void set_forward_id(uint16_t fid)
         {
-            pthread_spin_lock(&_lock);
-            response_send = true;
-            pthread_spin_unlock(&_lock);
+            forward_id = fid;
+            req->set_forward_id(fid);
         }
 
-        bool get_response_send()
+        uint16_t get_forward_id() const
         {
-            pthread_spin_lock(&_lock);
-            auto rs = response_send;
-            pthread_spin_unlock(&_lock);
-            return rs;
-        }
-
-        forward_item(dns::DnsPacket *, const request_pointer &);
-
-        ~forward_item();
-    };
-
-    using forward_item_pointer = std::shared_ptr<forward_item>;
-
-    struct forward_response : public response {
-        forward_item_pointer pointer;
-
-        forward_response(forward_item_pointer &item, uv_buf_t *b)
-            : response(item->req), pointer(item)
-        {
-            uint16_t *p = reinterpret_cast<uint16_t *>(b->base);
-            *p = item->origin_id;
-            response_buffer = b;
+            return forward_id;
         }
 
         virtual ~forward_response();
-    };
 
-    struct forward_queue_item {
-        forward_item_pointer item;
-        int ns_index;
+        virtual void set_response(char *, uint32_t) override;
     };
 
 }  // namespace objects

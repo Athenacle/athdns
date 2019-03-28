@@ -35,6 +35,10 @@ using namespace hash;
 using namespace dns;
 using namespace objects;
 
+using std::shared_ptr;
+using std::unique_ptr;
+using std::weak_ptr;
+
 global_server* global_server::server_instance = nullptr;
 
 //////////////////////////////////////////////////////////////////////
@@ -60,8 +64,7 @@ ip_address* global_server::sync_internal_query_A(const char* domain)
         buf->base = reinterpret_cast<char*>(pack->get_data());
         buf->len = pack->get_size();
         req->buf = buf;
-        request_pointer pointer(req);
-        forward_item* item = new forward_item(pack, pointer);
+        forward_response* item = new forward_response(req);
         forward_item_submit(item);
         pthread_barrier_wait(internal_barrier);
 
@@ -161,11 +164,9 @@ void global_server::init_server_loop()
         static auto lock = global_server::get_server().response_sending_queue_lock;
 
         static const auto& send_complete_cb = [](uv_udp_send_t* send, int flag) {
-            auto item = reinterpret_cast<found_response*>(send->data);
             if (unlikely(flag != 0)) {
                 WARN("sending failed: {0}", uv_strerror(flag));
             }
-            delete item;
             global_server::get_server().delete_uv_udp_send_t(send);
         };
 
@@ -175,7 +176,6 @@ void global_server::init_server_loop()
             queue.pop();
             auto send = global_server::get_server().new_uv_udp_send_t();
             auto udp = item->get_request()->udp;
-            send->data = item;
             auto buf = item->get_buffer();
             auto sock = item->get_sock();
             uv_udp_send(send, udp, buf, 1, sock, send_complete_cb);
@@ -388,44 +388,45 @@ void global_server::set_server_log_level(utils::log_level ll)
     logging::set_default_level(ll);
 }
 
-void global_server::forward_item_all(forward_item_pointer& item)
+void global_server::forward_item_all(weak_ptr<forward_response> forward)
 {
     for (auto& ns : remote_address) {
         send_object* obj = new send_object;
-        obj->bufs = item->req->buf;
-        obj->bufs_count = 1;
-        obj->sock = ns->get_sock();
-        ns->send(obj);
-        ns->increase_forward();
-        ns->insert_sending({item->forward_id, item});
-
-        DTRACE("OUT request {0} -> {1}", item->pack->getQuery().getName(), *ns);
+        if (!forward.expired()) {
+            auto item = forward.lock().get();
+            obj->bufs = item->get_request()->buf;
+            obj->bufs_count = 1;
+            obj->sock = ns->get_sock();
+            ns->send(obj);
+            ns->increase_forward();
+            ns->insert_sending({item->get_forward_id(), forward});
+            DTRACE("OUT request {0} -> {1}", item->get_request()->pack->getQuery().getName(), *ns);
+        } else {
+            delete obj;
+        }
     }
 }
 
-void global_server::forward_item_submit(forward_item* item)
+void global_server::forward_item_submit(forward_response* forward)
 {
     increase_forward();
-    item->forward_id = forward_id++;
-    if (unlikely(item->req->buf != nullptr)) {
-        *reinterpret_cast<uint16_t*>(item->req->buf->base) = item->forward_id;
-    }
-
-    forward_item_pointer pointer(item);
-
+    unique_ptr<forward_response> resp(forward);
+    auto fid = forward_id++;
+    forward->set_forward_id(fid);
     pthread_spin_lock(&forward_table_lock);
-    forward_table.insert({item->forward_id, pointer});
+    const auto ins = forward_table.insert({fid, std::move(resp)});
     pthread_spin_unlock(&forward_table_lock);
+    weak_ptr<forward_response> send_resp(ins.first->second);
 
     switch (forward_type) {
         case FT_ALL:
-            return forward_item_all(pointer);
+            return forward_item_all(send_resp);
         default:
             assert(false);
     }
 }
 
-void global_server::send_response(response* resp)
+void global_server::send_response(std::shared_ptr<response> resp)
 {
     pthread_mutex_lock(response_sending_queue_lock);
     response_sending_queue.emplace(resp);
@@ -436,7 +437,7 @@ void global_server::send_response(response* resp)
 void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameserver* ns)
 {
     uint16_t* p = reinterpret_cast<uint16_t*>(buf->base);
-    uint16_t forward_id = *p;
+    uint16_t forward_id = ntohs(*p);
 
 #ifdef DTRACE_OUTPUT
     DnsPacket* dpack = DnsPacket::fromDataBuffer(buf);
@@ -459,8 +460,8 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
         utils::free_buffer(buf->base);
         delete_uv_buf_t(buf);
     } else {
-        forward_item_pointer pointer = req->second;
-        pointer->set_response_send();
+        const static shared_ptr<forward_response> empty(nullptr);
+        shared_ptr<forward_response> pointer = req->second;
         forward_table.erase(req);
         pthread_spin_unlock(&forward_table_lock);
         DnsPacket* pack = DnsPacket::fromDataBuffer(buf);
@@ -468,11 +469,11 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
         record_node* node = pack->generate_record_node();
         cache_add_node(node);
         delete pack;
+        pointer->set_response(buf->base, buf->len);
 #ifdef HAVE_DOH_SUPPORT
-        if (likely(pointer->req->sock != nullptr)) {
+        if (likely(pointer->get_sock() != nullptr)) {
 #endif
-            forward_response* resp = new forward_response(pointer, buf);
-            send_response(resp);
+            send_response(std::move(pointer));
 #ifdef HAVE_DOH_SUPPORT
         } else {
             utils::free_buffer(buf->base);

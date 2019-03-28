@@ -18,24 +18,21 @@
 using namespace dns;
 using namespace objects;
 
-found_response::found_response(DnsPacket* pack, const request_pointer& rq)
-    : response(rq), packet(pack)
+response::response(request* p) : req(p) {}
+
+response::~response()
 {
-    response_buffer = global_server::get_server().new_uv_buf_t();
-    response_buffer->base = reinterpret_cast<char*>(pack->get_data());
-    response_buffer->len = pack->get_size();
+    delete req;
 }
 
-found_response::~found_response()
+void response::set_response(char* base, uint32_t size)
 {
-    delete packet;
-    global_server::get_server().delete_uv_buf_t(response_buffer);
+    uv_buf_t* buf = global_server::get_server().new_uv_buf_t();
+    buf->base = utils::get_buffer();
+    buf->len = size;
+    memmove(buf->base, base, size);
+    response_buffer = buf;
 }
-
-// response
-response::response(const request_pointer& p) : req(p) {}
-
-response::~response() {}
 
 // request
 request::request(
@@ -61,6 +58,13 @@ request::~request()
     global_server::get_server().delete_uv_buf_t(buf);
 }
 
+
+void forward_response::set_response(char* base, uint32_t size)
+{
+    response::set_response(base, size);
+    *reinterpret_cast<uint16_t*>(response_buffer->base) = htons(origin_id);
+}
+
 // forward response
 forward_response::~forward_response()
 {
@@ -69,18 +73,3 @@ forward_response::~forward_response()
 }
 
 // forward_item
-
-forward_item::forward_item(DnsPacket* packet, const request_pointer& rp) : req(rp), pack(packet)
-{
-    response_send = false;
-    if (unlikely(rp->buf != nullptr)) {
-        origin_id = *reinterpret_cast<uint16_t*>(rp->buf->base);
-    }
-    pthread_spin_init(&_lock, PTHREAD_PROCESS_PRIVATE);
-}
-
-forward_item::~forward_item()
-{
-    pthread_spin_destroy(&_lock);
-    delete pack;
-}
