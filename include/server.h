@@ -16,7 +16,6 @@
 #include "athdns.h"
 #include "dns.h"
 #include "hash.h"
-#include "objects.h"
 #include "remote.h"
 
 #include <pthread.h>

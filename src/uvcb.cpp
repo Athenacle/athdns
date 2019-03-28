@@ -12,7 +12,6 @@
 
 #include "athdns.h"
 #include "logging.h"
-#include "objects.h"
 #include "server.h"
 
 using namespace objects;

@@ -20,7 +20,6 @@
 #ifdef HAVE_DOH_SUPPORT
 
 #include "athdns.h"
-#include "objects.h"
 #include "record.h"
 #include "remote.h"
 

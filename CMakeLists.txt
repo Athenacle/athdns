@@ -140,7 +140,6 @@ set(ATHDNS_LIB_SRC
   src/logging.cpp
   src/record.cpp
   src/server.cpp
-  src/objects.cpp
   src/remote.cpp
   src/uvcb.cpp
   src/utils.cpp)
