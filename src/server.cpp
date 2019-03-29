@@ -157,6 +157,10 @@ void global_server::init_server_loop()
         uv_timer_stop(&server->timer);
         uv_stop(server->uv_main_loop);
         uv_walk(server->uv_main_loop, stop_cb, nullptr);
+
+        for (auto& ns : server->remote_address) {
+            ns->stop_remote();
+        }
     };
 
     static const auto& async_work_sending_response_cb = [](uv_async_t*) {
@@ -378,9 +382,6 @@ void global_server::do_stop()
         utils::get_current_buffer_allocate());
 #endif
     uv_async_send(async_works);
-    for (auto& ns : remote_address) {
-        ns->stop_remote();
-    }
 }
 
 void global_server::set_server_log_level(utils::log_level ll)
