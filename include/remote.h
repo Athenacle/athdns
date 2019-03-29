@@ -123,6 +123,8 @@ namespace objects
 
 namespace remote
 {
+    enum class remote_nameserver_type { abstract, udp, doh };
+
     class abstract_nameserver
     {
     private:
@@ -159,6 +161,11 @@ namespace remote
         }
 
     public:
+        virtual remote_nameserver_type get_nameserver_type() const
+        {
+            return remote_nameserver_type::abstract;
+        }
+
         void increase_forward()
         {
             ++request_forward_count;
@@ -264,6 +271,11 @@ namespace remote
         uv_udp_t *get_udp_hander() const
         {
             return udp_handler;
+        }
+
+        virtual remote_nameserver_type get_nameserver_type() const override
+        {
+            return remote_nameserver_type::udp;
         }
 
     private:

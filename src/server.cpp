@@ -229,6 +229,22 @@ void global_server::init_server()
 
 void global_server::start_server()
 {
+    // here is sort of upstream servers.
+    // simple stable insert-sort
+    std::vector<remote::abstract_nameserver*> servers;
+    std::for_each(remote_address.begin(), remote_address.end(), [&](auto& itor) {
+        if (itor->get_nameserver_type() == remote::remote_nameserver_type::doh) {
+            servers.emplace_back(itor);
+            itor = nullptr;
+        }
+    });
+    std::for_each(remote_address.begin(), remote_address.end(), [&](auto itor) {
+        if (itor != nullptr) {
+            servers.emplace_back(itor);
+        }
+    });
+    std::swap(servers, remote_address);
+
     for (auto& ns : remote_address) {
         ns->start_remote();
     }
