@@ -274,6 +274,12 @@ bool record_node_A::operator==(const record_node_A &a) const
 void record_node_A::to_string(string &str) const
 {
     address.to_string(str);
+    auto next = get_next();
+    if (next != nullptr) {
+        string n;
+        next->to_string(n);
+        str.append(" ").append(n);
+    }
 }
 
 const uint8_t *record_node_A::get_value() const
@@ -300,8 +306,14 @@ record_node_CNAME::record_node_CNAME(uint8_t *buffer, uint8_t *begin, domain_nam
 
 void record_node_CNAME::to_string(string &str) const
 {
-    str = "CNAME ->";
+    str = " CNAME -> ";
     str.append(actual_name);
+    if (get_next() != nullptr) {
+        str.append(" -> ");
+        string next;
+        get_next()->to_string(next);
+        str.append(next);
+    }
 }
 
 domain_name record_node_CNAME::get_actual_name() const
