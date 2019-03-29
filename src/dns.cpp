@@ -77,6 +77,7 @@ namespace dns
                 ptr++;
                 while (count > 0) {
                     if (unlikely(!isalnum(*ptr))) {
+                        delete[] ret;
                         return nullptr;
                     }
                     *pointer = tolower(*ptr);
