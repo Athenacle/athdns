@@ -20,7 +20,6 @@
 #ifdef HAVE_DOH_SUPPORT
 
 #include "athdns.h"
-#include "objects.h"
 #include "record.h"
 #include "remote.h"
 
@@ -264,6 +263,11 @@ namespace remote
         {
             current_error = err;
             uv_async_send(async_rst_handler);
+        }
+
+        virtual remote_nameserver_type get_nameserver_type() const override
+        {
+            return remote_nameserver_type::doh;
         }
     };
 

@@ -16,19 +16,15 @@
 #include "athdns.h"
 #include "dns.h"
 #include "hash.h"
-#include "objects.h"
 #include "remote.h"
 
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/prctl.h>
 
-#include <map>
 #include <memory>
 #include <queue>
 #include <unordered_map>
-
-void uvcb_incoming_request_worker(uv_work_t *);
 
 void uvcb_incoming_request_response_send_complete(uv_udp_send_t *, int);
 
@@ -38,23 +34,24 @@ void uvcb_async_remote_response_send(uv_async_t *);
 
 class global_server
 {
-    friend void delete_timer_worker(uv_timer_t *);
-    friend void uvcb_async_stop_loop(uv_async_t *);
     friend void uvcb_async_response_send(uv_async_t *);
-    friend void uvcb_timer_cleaner(uv_timer_t *);
     friend void uvcb_async_remote_response_send(uv_async_t *async);
 
     using static_address_type = std::tuple<string, uint32_t>;
     using queue_item = std::tuple<uv_buf_t *, const sockaddr *, ssize_t>;
 
+    using forward_object = std::weak_ptr<objects::forward_response>;
+
+    // listen_address:     ip-string         port     listen_socket uv_udp_handle
     std::vector<std::tuple<const char *, uint16_t, sockaddr *, uv_udp_t *>> listen_address;
 
-    std::vector<remote::abstract_nameserver *> remote_address;
-    std::vector<static_address_type> *static_address;
+    std::vector<remote::abstract_nameserver *> upstream_nameservers;
 
-    std::unordered_map<uint16_t, objects::forward_item_pointer> forward_table;
+    std::vector<static_address_type> *static_listen_address;
 
-    std::queue<objects::response *> response_sending_queue;
+    std::unordered_map<uint16_t, std::shared_ptr<objects::forward_response>> forward_table;
+
+    std::queue<std::shared_ptr<objects::response>> response_sending_queue;
 
     pthread_mutex_t *response_sending_queue_lock;
 
@@ -80,18 +77,13 @@ class global_server
     uv_async_t *sending_response_works;
 
     uv_timer_t current_time_timer;
-    uv_timer_t timer;
-    uv_timer_t cleanup_timer;
+    uv_timer_t reporter_timer;
 
-
-    pthread_spinlock_t queue_lock;
     pthread_spinlock_t forward_table_lock;
 
     sem_t queue_sem;
 
     int forward_type;
-
-    pthread_mutex_t sending_lock;
 
 #ifdef HAVE_DOH_SUPPORT
     pthread_mutex_t *sync_query_mutex;
@@ -107,47 +99,51 @@ class global_server
 
     static global_server *server_instance;
 
-    void forward_item_all(objects::forward_item_pointer &);
+    void forward_item_all(forward_object);
 
-#define ADD_ALLOCATOR_POOL(__type)                \
-private:                                          \
-    utils::allocator_pool<__type> __type##_pool;  \
-                                                  \
-public:                                           \
-    template <class... Args>                      \
-    __type *new_##__type(const Args &... __args)  \
-    {                                             \
-        return __type##_pool.allocate(__args...); \
-    }                                             \
-    void delete_##__type(__type *p)               \
-    {                                             \
-        __type##_pool.deallocate(p);              \
+#define ADD_ALLOCATOR_POOL(__type, new_after, delete_before) \
+private:                                                     \
+    utils::allocator_pool<__type> __type##_pool;             \
+                                                             \
+public:                                                      \
+    template <class... Args>                                 \
+    __type *new_##__type(const Args &... __args)             \
+    {                                                        \
+        auto pointer = __type##_pool.allocate(__args...);    \
+        do {                                                 \
+            new_after                                        \
+        } while (false);                                     \
+        return pointer;                                      \
+    }                                                        \
+    void delete_##__type(__type *p)                          \
+    {                                                        \
+        do {                                                 \
+            delete_before                                    \
+        } while (false);                                     \
+        __type##_pool.deallocate(p);                         \
     }
 
-    ADD_ALLOCATOR_POOL(uv_buf_t)
-    ADD_ALLOCATOR_POOL(uv_udp_send_t)
+    ADD_ALLOCATOR_POOL(uv_buf_t, { pointer->base = nullptr; }, { utils::free_buffer(p->base); })
+
+    ADD_ALLOCATOR_POOL(uv_udp_send_t, {}, {})
 
 #undef ADD_ALLOCATOR_POOL
 
 private:
-    void cleanup(uv_timer_t *);
-
     void init_server_loop();
 
     void destroy_ssl_libraries();
     void init_ssl_libraries();
 
 public:
-    void send_response(objects::response *);
+    void send_response(std::shared_ptr<objects::response>);
 
     uv_loop_t *get_main_loop()
     {
         return uv_main_loop;
     }
 
-    void forward_item_submit(objects::forward_item *);
-
-    void send(objects::send_object *);
+    void forward_item_submit(objects::forward_response *);
 
     void increase_request()
     {
@@ -184,24 +180,19 @@ public:
         return *table;
     }
 
-    pthread_spinlock_t *get_spinlock()
-    {
-        return &queue_lock;
-    }
-
     sem_t *get_semaphore()
     {
         return &queue_sem;
     }
 
-    static void destroy_server()
+    static void destroy_local_udp_server_instance()
     {
         if (server_instance != nullptr) {
             delete server_instance;
         }
     }
 
-    static void init_instance()
+    static void init_local_udp_server_instance()
     {
         server_instance = new global_server;
     }
@@ -250,20 +241,20 @@ public:
 
     const std::vector<remote::abstract_nameserver *> &get_remote_server() const
     {
-        return remote_address;
+        return upstream_nameservers;
     }
 
-    void init_server();
+    void init_local_udp_server();
 
-    void start_server();
+    void start_local_udp_server();
 
-    void do_stop();
+    void stop_local_udp_server();
 
     void response_from_remote(uv_buf_t *, remote::abstract_nameserver *);
 
     void cache_add_node(record_node *);
 
-    time_t get_time() const
+    time_t get_current_time() const
     {
         return current_time;
     }
@@ -276,6 +267,5 @@ public:
     void add_doh_nameserver(const char *);
 #endif
 };
-
 
 #endif

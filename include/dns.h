@@ -150,13 +150,12 @@ namespace dns
     }  // namespace dns_utils
 
 
-    class Query
+    class query
     {
-        uint16_t _type;
-        uint16_t _class;
+        uint16_t type;
+        uint16_t clazz;
 
-        const char *_name;
-        uint8_t _label_count;
+        const char *name;
 
     public:
         static const uint8_t QUERY_TYPE_A;
@@ -165,38 +164,36 @@ namespace dns
         static int query_section_builder(
             domain_name dname, uint8_t *buf, size_t buf_size, uint16_t type, uint16_t clazz);
 
-        static int query_section_builder(const Query &query, uint8_t *buf, size_t buf_size);
+        static int query_section_builder(const query &query, uint8_t *buf, size_t buf_size);
 
-        explicit Query(uint8_t *);
+        explicit query(uint8_t *);
 
-        Query(const char *name, uint16_t type, uint16_t clazz)
-            : _type(type), _class(clazz), _name(name)
+        query(const char *name, uint16_t type, uint16_t clazz)
+            : type(type), clazz(clazz), name(name)
         {
         }
 
-        Query()
+        query()
         {
-            _type = _class = _label_count = 0;
-            _name = nullptr;
+            type = clazz = 0;
+            name = nullptr;
         }
 
-        ~Query();
+        ~query();
 
         uint16_t getType() const
         {
-            return _type;
+            return type;
         }
+
         uint16_t getClass() const
         {
-            return _class;
+            return clazz;
         }
-        uint8_t getLabelCount() const
-        {
-            return _label_count;
-        }
+
         const char *getName() const
         {
-            return _name;
+            return name;
         }
     };
 
@@ -210,47 +207,47 @@ namespace dns
         number_error
     };
 
-    class DnsPacket
+    class dns_packet
     {
         friend class dns_package_builder;
 
     private:
-        uint8_t *_data;
-        uint32_t _size;
+        uint8_t *data;
+        uint32_t size;
 
         uint8_t *flag_pointer;
 
-        uint16_t _id;
-        uint16_t _flag;
+        uint16_t id;
+        uint16_t flag;
 
         bool parsed;
 
-        DnsPacket()
+        dns_packet()
         {
-            _id = _flag = 0xffff;
-            _size = 0;
-            _data = nullptr;
+            id = flag = 0xffff;
+            size = 0;
+            data = nullptr;
             parsed = false;
         }
 
         void test_flag() const
         {
-            assert(_flag != 0xffff);
+            assert(flag != 0xffff);
         }
 
-        Query _query;
+        query this_query;
 
-        void swap(DnsPacket &&);
+        void swap(dns_packet &&);
 
     public:
-        ~DnsPacket();
+        ~dns_packet();
 
-        static DnsPacket *fromDataBuffer(const uv_buf_t *, dns_parse_status &);
+        static dns_packet *fromDataBuffer(const uv_buf_t *, dns_parse_status &);
 
-        static DnsPacket *fromDataBuffer(uint8_t *, uint32_t);
-        static DnsPacket *fromDataBuffer(uv_buf_t *);
+        static dns_packet *fromDataBuffer(uint8_t *, uint32_t);
+        static dns_packet *fromDataBuffer(uv_buf_t *);
 
-        static DnsPacket *build_response_with_records(DnsPacket *, record_node *);
+        static dns_packet *build_response_with_records(dns_packet *, record_node *);
 
         uint16_t getQueryID() const;
         uint16_t getFlag() const;
@@ -269,18 +266,18 @@ namespace dns
 
         uint32_t get_size() const
         {
-            return _size;
+            return size;
         }
 
         uint8_t *get_data() const
         {
-            return _data;
+            return data;
         }
 
 
-        const Query &getQuery() const
+        const query &getQuery() const
         {
-            return _query;
+            return this_query;
         }
 
         bool isAA() const;
@@ -340,17 +337,16 @@ namespace dns
 
         reference set_query(const char *);
         reference set_query(uint8_t *, int);
-        reference set_query(const Query &);
+        reference set_query(const query &);
 
         reference add_record(record_node *);
 
         reference set_answer_record(record_node *);
 
-        DnsPacket *build();
+        dns_packet *build();
 
         static void basic_query_package(reference, const char *);
     };
-
 
 }  // namespace dns
 

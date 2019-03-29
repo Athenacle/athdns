@@ -41,7 +41,7 @@ namespace
         return std::stoi(part);
     }
 
-    utils::allocator_pool<char, recv_buffer_size> *pool = nullptr;
+    utils::allocator_pool<char, global_buffer_size> *pool = nullptr;
 
 }  // namespace
 
@@ -108,13 +108,16 @@ namespace utils
         return pool->get_current_allocated();
     }
 
-    char *get_buffer()
+    char *get_buffer(size_t size)
     {
-        return pool->allocate();
+        return pool->allocate(size);
     }
 
     void free_buffer(char *buffer)
     {
+        if (unlikely(buffer == nullptr)) {
+            return;
+        }
         pool->deallocate(buffer);
     }
 
@@ -126,7 +129,7 @@ namespace utils
 
     void init_buffer_pool(size_t buf_count)
     {
-        pool = new utils::allocator_pool<char, recv_buffer_size>(buf_count);
+        pool = new utils::allocator_pool<char, global_buffer_size>(buf_count);
     }
 
     uint32_t rand_value()

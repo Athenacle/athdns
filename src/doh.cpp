@@ -147,7 +147,7 @@ namespace
         };
 
         auto doh = to_doh(user_data);
-        assert(name_len < recv_buffer_size && value_len < recv_buffer_size);
+        assert(name_len < global_buffer_size && value_len < global_buffer_size);
         auto nb = utils::get_buffer();
         auto vb = utils::get_buffer();
         memcpy(nb, name, name_len);
@@ -199,8 +199,6 @@ namespace
         return 0;
     }
 }  // namespace
-
-// cbs
 
 namespace remote
 {
@@ -401,7 +399,6 @@ void doh_nameserver::send(uv_buf_t* buf)
                 WARN("sending failed: {0}", uv_strerror(f));
             }
             auto buf = reinterpret_cast<uv_buf_t*>(t->data);
-            utils::free_buffer(buf->base);
             global_server::get_server().delete_uv_buf_t(buf);
             delete t;
         });
@@ -649,7 +646,7 @@ void doh_nameserver::send(const uint8_t* buf, size_t s)
         __openssl_check(ret);
     } else {
         char* buffer = utils::get_buffer();
-        int read_size = BIO_read(write_bio, buffer, recv_buffer_size);
+        int read_size = BIO_read(write_bio, buffer, global_buffer_size);
         if (read_size <= 0) {
             __openssl_check(read_size);
         } else {
@@ -863,11 +860,8 @@ void doh_nameserver::h2_submit_data(int stream_id, const uint8_t* data, size_t l
     } else {
         if (itor->second->status_code == 200) {
             char* buf;
-            if (len > recv_buffer_size) {
-                buf = new char[len];
-            } else {
-                buf = utils::get_buffer();
-            }
+            buf = utils::get_buffer(len);
+
             memcpy(buf, data, len);
             auto uvbuf = global_server::get_server().new_uv_buf_t();
             uvbuf->base = buf;

@@ -19,8 +19,6 @@
 
 #include <pthread.h>
 
-#include <algorithm>
-#include <cstring>  // memset
 #include <functional>
 #include <queue>
 #include <type_traits>  // std::enable_if_t
@@ -32,7 +30,7 @@ namespace utils
     bool check_uv_return_status(int, const char *);
 
     void init_buffer_pool(size_t);
-    char *get_buffer();
+    char *get_buffer(size_t = global_buffer_size);
     void free_buffer(char *);
     void destroy_buffer();
 #ifndef NDEBUG
@@ -162,6 +160,11 @@ namespace utils
     private:
         struct __entry_map {
             bool used;
+            size_t alloc_size;
+            __entry_map(size_t s)
+            {
+                alloc_size = s;
+            }
         };
         pthread_mutex_t *mutex;
         std::queue<pointer> empty_queue;
@@ -191,9 +194,20 @@ namespace utils
                     auto nv = reinterpret_cast<pointer>(malloc(N * sizeof(value_type)));
                     new (nv) value_type();
                     empty_queue.emplace(nv);
-                    pool_map.insert({nv, __entry_map()});
+                    pool_map.insert({nv, __entry_map(N)});
                 }
             }
+        }
+
+        template <unsigned int _N = N>
+        typename std::enable_if_t<_N >= 2, pointer> get_pointer(size_t size)
+        {
+            assert(size > _N);
+            pointer ret = reinterpret_cast<pointer>(malloc(size * sizeof(value_type)));
+            lock();
+            pool_map.insert({ret, __entry_map(size)});
+            unlock();
+            return ret;
         }
 
         pointer get_pointer()
@@ -214,8 +228,16 @@ namespace utils
         void free_pointer(pointer p)
         {
             lock();
-            pool_map.find(p)->second.used = false;
-            empty_queue.emplace(p);
+            auto itor = pool_map.find(p);
+            assert(itor != pool_map.end());
+            assert(itor->second.used);
+            if (itor->second.alloc_size <= N) {
+                itor->second.used = false;
+                empty_queue.emplace(p);
+            } else {
+                free(p);
+                pool_map.erase(itor);
+            }
             unlock();
         }
 
@@ -243,12 +265,17 @@ namespace utils
         }
 
         template <unsigned int _N = N>
-        typename std::enable_if_t<(_N >= 2), pointer> allocate()
+        typename std::enable_if_t<(_N >= 2), pointer> allocate(size_t size = _N)
         {
 #ifndef NDEBUG
             allocated_count++;
 #endif
-            pointer ret = get_pointer();
+            pointer ret;
+            if (size <= _N) {
+                ret = get_pointer();
+            } else {
+                ret = get_pointer(size);
+            }
             return ret;
         }
 

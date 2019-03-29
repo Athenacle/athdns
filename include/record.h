@@ -246,7 +246,11 @@ namespace fmt
         {
             string str;
             p.to_string(str);
-            return format_to(ctx.begin(), "{0}->{0}", p.get_name(), str);
+            if (p.get_next() == nullptr) {
+                return format_to(ctx.begin(), "{0}->{1}", p.get_name(), str);
+            } else {
+                return format_to(ctx.begin(), "{0}->{1}->{2}", p.get_name(), str, *p.get_next());
+            }
         }
     };
 

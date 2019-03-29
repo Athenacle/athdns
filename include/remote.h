@@ -14,27 +14,124 @@
 #define RSERVER_H
 
 #include "athdns.h"
-#include "objects.h"
 #include "record.h"
 #include "utils.h"
 
 #include "fmt/ostream.h"
 
 #include <map>
+#include <memory>
 #include <queue>
+
+namespace objects
+{
+    struct send_object {
+        const sockaddr *sock;
+        uv_buf_t *bufs;
+        int bufs_count;
+    };
+
+    struct request {
+        uv_buf_t *buf;
+        ssize_t nsize;
+        const sockaddr *sock;
+        dns::dns_packet *pack;
+        uv_udp_t *udp;
+
+        request(dns::dns_packet *p) : pack(p)
+        {
+            sock = nullptr;
+        }
+
+        request(const uv_buf_t *, ssize_t, const sockaddr *, uv_udp_t *, dns::dns_packet *p);
+
+        ~request();
+        void set_forward_id(uint16_t fid)
+        {
+            *reinterpret_cast<uint16_t *>(buf->base) = htons(fid);
+        }
+    };
+
+    using request_pointer = std::shared_ptr<request>;
+
+    class response
+    {
+    protected:
+        uv_buf_t *response_buffer;
+        request *req;
+
+    public:
+        response(request *);
+
+        virtual ~response();
+
+        const request *get_request() const
+        {
+            return req;
+        }
+
+        request *get_request()
+        {
+            return req;
+        }
+
+        uv_buf_t *get_buffer() const
+        {
+            return response_buffer;
+        }
+
+        const sockaddr *get_sock() const
+        {
+            return req->sock;
+        }
+
+        virtual void set_response(char *, uint32_t);
+    };
+
+    class forward_response : public response
+    {
+        uint16_t forward_id;
+        uint16_t origin_id;
+
+    public:
+        uint16_t get_original_id() const
+        {
+            return origin_id;
+        }
+
+        forward_response(request *req) : response(req)
+        {
+            origin_id = htons(*reinterpret_cast<uint16_t *>(req->buf->base));
+        }
+
+        void set_forward_id(uint16_t fid)
+        {
+            forward_id = fid;
+            req->set_forward_id(fid);
+        }
+
+        uint16_t get_forward_id() const
+        {
+            return forward_id;
+        }
+
+        virtual ~forward_response();
+
+        virtual void set_response(char *, uint32_t) override;
+    };
+
+}  // namespace objects
 
 namespace remote
 {
+    enum class remote_nameserver_type { abstract, udp, doh };
+
     class abstract_nameserver
     {
-    protected:
-        using sending_item_type = std::pair<uint16_t, objects::forward_item_pointer>;
-
     private:
-        sockaddr_in *sock;
+        sockaddr_in *upstream_socket;
         uv_loop_t *loop;
         uv_async_t *stop_async;
-        pthread_mutex_t *sending_lock;
         pthread_t *work_thread;
 
         int remote_port;
@@ -42,7 +139,6 @@ namespace remote
         ip_address remote_address;
 
     protected:
-        std::map<uint16_t, objects::forward_item_pointer> sending;
         utils::atomic_int request_forward_count;
         utils::atomic_int response_count;
 
@@ -66,6 +162,11 @@ namespace remote
         }
 
     public:
+        virtual remote_nameserver_type get_nameserver_type() const
+        {
+            return remote_nameserver_type::abstract;
+        }
+
         void increase_forward()
         {
             ++request_forward_count;
@@ -74,17 +175,6 @@ namespace remote
         bool init_socket();
 
         void swap(abstract_nameserver &);
-
-        bool find_erase(uint16_t);
-
-        void insert_sending(const sending_item_type &);
-
-        size_t get_sending_size() const
-        {
-            return sending.size();
-        }
-
-        int clean_sent();
 
         abstract_nameserver(uint32_t, int);
         abstract_nameserver();
@@ -98,7 +188,7 @@ namespace remote
 
         sockaddr *get_sock() const
         {
-            return reinterpret_cast<sockaddr *>(sock);
+            return reinterpret_cast<sockaddr *>(upstream_socket);
         }
 
         int get_index() const
@@ -116,11 +206,13 @@ namespace remote
             return this;
         }
 
-        void start_remote();
-        void stop_remote();
+        void start_upstream();
+        void stop_upstream();
 
         virtual void send(objects::send_object *) = 0;
-        void init_remote();
+
+        void init_upstream();
+
         virtual void destroy_remote() = 0;
 
         const ip_address &get_ip_address() const
@@ -147,7 +239,6 @@ namespace remote
 
     class udp_nameserver : public remote::abstract_nameserver
     {
-        // uv UDP handlers
         uv_udp_t *udp_handler;
         uv_async_t *async_send;
         pthread_mutex_t *sending_queue_mutex;
@@ -161,9 +252,14 @@ namespace remote
             uv_udp_recv_stop(udp_handler);
         }
 
+    private:
+        void init_upstream();
+
     public:
         udp_nameserver(const ip_address &&, int = 53);
+
         udp_nameserver(uint32_t, int = 53);
+
         virtual ~udp_nameserver() override;
 
         bool operator==(const ip_address &);
@@ -176,12 +272,17 @@ namespace remote
         void swap(const udp_nameserver &);
 
         virtual void send(objects::send_object *obj) override;
-        void init_remote();
+
         virtual void destroy_remote() override;
 
-        uv_udp_t *get_udp_hander() const
+        uv_udp_t *get_udp_handler() const
         {
             return udp_handler;
+        }
+
+        virtual remote_nameserver_type get_nameserver_type() const override
+        {
+            return remote_nameserver_type::udp;
         }
 
     private:
