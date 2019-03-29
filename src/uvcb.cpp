@@ -20,7 +20,7 @@ using namespace dns;
 void uvcb_server_incoming_alloc(uv_handle_t*, size_t, uv_buf_t* buf)
 {
     buf->base = utils::get_buffer();
-    buf->len = recv_buffer_size;
+    buf->len = global_buffer_size;
 }
 
 void uvcb_server_incoming_recv(
@@ -54,7 +54,7 @@ void uvcb_server_incoming_recv(
     static auto& table = server.get_hashtable();
 
     dns::dns_parse_status status;
-    DnsPacket* pack = DnsPacket::fromDataBuffer(buf, status);
+    dns_packet* pack = dns_packet::fromDataBuffer(buf, status);
     if (status == dns_parse_status::request_ok) {
         assert(pack != nullptr);
         auto req = new objects::request(buf, nread, addr, udp, pack);
@@ -63,7 +63,7 @@ void uvcb_server_incoming_recv(
         auto name = pack->getQuery().getName();
         if (unlikely(strcmp(name, "stop.dnsserver.ok") == 0)) {
             delete req;
-            global_server::get_server().do_stop();
+            global_server::get_server().stop_local_udp_server();
         } else {
             auto id = pack->getQueryID();
             record_node* found = table.get(name);
@@ -75,7 +75,7 @@ void uvcb_server_incoming_recv(
                 string text;
                 found->to_string(text);
                 TRACE("IN request: ID #{0:x} -> {1} : {2} (cached)", id, name, text);
-                DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
+                dns_packet* ret = dns_packet::build_response_with_records(pack, found);
                 uv_buf_t* buf = global_server::get_server().new_uv_buf_t();
                 buf->base = utils::get_buffer();
                 buf->len = ret->get_size();
@@ -85,7 +85,7 @@ void uvcb_server_incoming_recv(
                 uv_udp_send(sent, udp, buf, 1, addr, [](uv_udp_send_t* sent, int f) {
                     auto buf = reinterpret_cast<uv_buf_t*>(sent->data);
                     if (unlikely(f < 0)) {
-                        DnsPacket* pack = DnsPacket::fromDataBuffer(buf);
+                        dns_packet* pack = dns_packet::fromDataBuffer(buf);
                         pack->parse();
                         TRACE("sending failed for {0}: {1}",
                               pack->getQuery().getName(),

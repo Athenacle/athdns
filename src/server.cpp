@@ -57,7 +57,7 @@ ip_address* global_server::sync_internal_query_A(const char* domain)
     } else {
         dns_package_builder builder;
         dns_package_builder::basic_query_package(builder, domain);
-        DnsPacket* pack = builder.build();
+        dns_packet* pack = builder.build();
         pack->parse();
         request* req = new request(pack);
         uv_buf_t* buf = new_uv_buf_t();
@@ -84,7 +84,7 @@ ip_address* global_server::sync_internal_query_A(const char* domain)
 void global_server::add_remote_address(uint32_t ip)
 {
     remote::udp_nameserver* ns = new remote::udp_nameserver(ip);
-    remote_address.emplace_back(ns);
+    upstream_nameservers.emplace_back(ns);
 }
 
 void global_server::set_log_file(const CH* path)
@@ -103,7 +103,7 @@ void global_server::init_server_loop()
 {
     uv_main_loop = uv_default_loop();
 
-    auto status = uv_timer_init(uv_main_loop, &timer);
+    auto status = uv_timer_init(uv_main_loop, &reporter_timer);
     utils::check_uv_return_status(status, "timer reporter init");
 
     if (listen_address.size() == 0) {
@@ -142,12 +142,12 @@ void global_server::init_server_loop()
             uv_udp_recv_stop(std::get<3>(listen));
         }
 
-        uv_timer_stop(&server->timer);
+        uv_timer_stop(&server->reporter_timer);
         uv_stop(server->uv_main_loop);
         uv_walk(server->uv_main_loop, stop_cb, nullptr);
 
-        for (auto& ns : server->remote_address) {
-            ns->stop_remote();
+        for (auto& ns : server->upstream_nameservers) {
+            ns->stop_upstream();
         }
     };
 
@@ -192,33 +192,33 @@ void global_server::set_static_ip(const string& domain, uint32_t ip)
 
 void global_server::add_static_ip(const string& domain, uint32_t ip)
 {
-    if (static_address == nullptr) {
-        static_address = new std::vector<static_address_type>;
+    if (static_listen_address == nullptr) {
+        static_listen_address = new std::vector<static_address_type>;
     }
-    static_address->emplace_back(std::make_tuple(domain, ip));
+    static_listen_address->emplace_back(std::make_tuple(domain, ip));
 }
 
-void global_server::init_server()
+void global_server::init_local_udp_server()
 {
     if (table == nullptr) {
         table = new hash::hashtable(cache_count);
     }
-    if (static_address != nullptr) {
-        for (auto& sa : *static_address) {
+    if (static_listen_address != nullptr) {
+        for (auto& sa : *static_listen_address) {
             auto& domain = std::get<0>(sa);
             auto ip = std::get<1>(sa);
             set_static_ip(domain, ip);
         }
-        delete static_address;
-        static_address = nullptr;
+        delete static_listen_address;
+        static_listen_address = nullptr;
     }
     init_server_loop();
-    if (unlikely(remote_address.size() == 0)) {
+    if (unlikely(upstream_nameservers.size() == 0)) {
         ERROR("empty remote nameserver, reject to startup. exiting...");
         exit(1);
     } else {
-        for (size_t i = 0; i < remote_address.size(); i++) {
-            remote_address[i]->set_index(i);
+        for (size_t i = 0; i < upstream_nameservers.size(); i++) {
+            upstream_nameservers[i]->set_index(i);
         }
     }
     current_time_timer.data = &current_time;
@@ -227,26 +227,26 @@ void global_server::init_server()
 #endif
 }
 
-void global_server::start_server()
+void global_server::start_local_udp_server()
 {
     // here is sort of upstream servers.
     // simple stable insert-sort
     std::vector<remote::abstract_nameserver*> servers;
-    std::for_each(remote_address.begin(), remote_address.end(), [&](auto& itor) {
+    std::for_each(upstream_nameservers.begin(), upstream_nameservers.end(), [&](auto& itor) {
         if (itor->get_nameserver_type() == remote::remote_nameserver_type::doh) {
             servers.emplace_back(itor);
             itor = nullptr;
         }
     });
-    std::for_each(remote_address.begin(), remote_address.end(), [&](auto itor) {
+    std::for_each(upstream_nameservers.begin(), upstream_nameservers.end(), [&](auto itor) {
         if (itor != nullptr) {
             servers.emplace_back(itor);
         }
     });
-    std::swap(servers, remote_address);
+    std::swap(servers, upstream_nameservers);
 
-    for (auto& ns : remote_address) {
-        ns->start_remote();
+    for (auto& ns : upstream_nameservers) {
+        ns->start_upstream();
     }
 
     static const auto& current_time_timer_func = [](uv_timer_t* p) {
@@ -279,7 +279,7 @@ void global_server::start_server()
     };
     int reportt = timer_timeout * 1000;
 
-    uv_timer_start(&timer, report_func, reportt, reportt);
+    uv_timer_start(&reporter_timer, report_func, reportt, reportt);
     uv_timer_start(&current_time_timer, current_time_timer_func, 1000, 1000);
     for (auto& listen : listen_address) {
         uv_udp_recv_start(
@@ -297,7 +297,7 @@ global_server::~global_server()
     if (table != nullptr) {
         delete table;
     }
-    for (auto& ns : remote_address) {
+    for (auto& ns : upstream_nameservers) {
         delete ns;
     }
     for (auto& listen : listen_address) {
@@ -327,9 +327,7 @@ global_server::~global_server()
 
 global_server::global_server()
     : forward_id(utils::rand_value() & 0xffff),
-      queue_lock(),
       queue_sem(),
-      sending_lock(PTHREAD_MUTEX_INITIALIZER),
       uv_buf_t_pool(256),
       uv_udp_send_t_pool(100)
 {
@@ -348,10 +346,9 @@ global_server::global_server()
     cache_count = 3000;
     log_file = "";
     uv_main_loop = nullptr;
-    static_address = nullptr;
+    static_listen_address = nullptr;
     timer_timeout = 5;
     forward_type = FT_ALL;
-    pthread_spin_init(&queue_lock, PTHREAD_PROCESS_PRIVATE);
     pthread_spin_init(&forward_table_lock, PTHREAD_PROCESS_PRIVATE);
     pthread_mutex_init(response_sending_queue_lock, nullptr);
     sem_init(&queue_sem, 0, 0);
@@ -361,7 +358,7 @@ global_server::global_server()
     sending_response_works = new uv_async_t;
 }
 
-void global_server::do_stop()
+void global_server::stop_local_udp_server()
 {
     INFO("stopping server.");
 #ifndef ATHDNS_MEM_DEBUG
@@ -388,7 +385,7 @@ void global_server::set_server_log_level(utils::log_level ll)
 
 void global_server::forward_item_all(weak_ptr<forward_response> forward)
 {
-    for (auto& ns : remote_address) {
+    for (auto& ns : upstream_nameservers) {
         send_object* obj = new send_object;
         if (!forward.expired()) {
             auto item = forward.lock().get();
@@ -437,7 +434,7 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
     uint16_t forward_id = ntohs(*p);
 
 #ifdef DTRACE_OUTPUT
-    DnsPacket* dpack = DnsPacket::fromDataBuffer(buf);
+    dns_packet* dpack = dns_packet::fromDataBuffer(buf);
     dpack->parse();
     string node_string;
     record_node* node = dpack->generate_record_node();
@@ -460,7 +457,7 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
         shared_ptr<forward_response> pointer = req->second;
         forward_table.erase(req);
         pthread_spin_unlock(&forward_table_lock);
-        DnsPacket* pack = DnsPacket::fromDataBuffer(buf);
+        dns_packet* pack = dns_packet::fromDataBuffer(buf);
         pack->parse();
         record_node* node = pack->generate_record_node();
         cache_add_node(node);
@@ -496,7 +493,7 @@ void global_server::config_listen_at(const char* ip, uint16_t port)
 void global_server::add_doh_nameserver(const char* url)
 {
     remote::doh_nameserver* ns = new remote::doh_nameserver(url);
-    remote_address.emplace_back(ns);
+    upstream_nameservers.emplace_back(ns);
 }
 #endif
 

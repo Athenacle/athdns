@@ -51,16 +51,14 @@ class global_server;
 // dns.h
 namespace dns
 {
-    class Query;
-    class DnsPacket;
+    class query;
+    class dns_packet;
     class dns_package_builder;
 }  // namespace dns
 
 
 // global functions
-const int default_dns_port = 53;
-
-const size_t recv_buffer_size = 512;
+const size_t global_buffer_size = 512;
 
 void uvcb_server_incoming_alloc(uv_handle_t *, size_t, uv_buf_t *);
 
@@ -80,7 +78,6 @@ namespace utils
     void split(std::vector<string> &, const CH *, const CH);
     bool check_ip_address(const CH *, uint32_t &);
     void config_system(int, CH *const[]);
-
 
     enum log_level {
         LL_OTHERS = 0,

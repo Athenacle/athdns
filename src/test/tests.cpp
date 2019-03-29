@@ -105,14 +105,14 @@ void* combined_test_startup(void*)
     test_obj->argv[0] = utils::str_dump(PROJECT_NAME);
     test_obj->argv[1] = utils::str_dump(test_conf_file);
     if (access(test_conf_file, R_OK) == 0) {
-        global_server::init_instance();
+        global_server::init_local_udp_server_instance();
         utils::config_system(2, test_obj->argv);
         utils::init_buffer_pool(512);
         auto& s = global_server::get_server();
-        s.init_server();
+        s.init_local_udp_server();
         pthread_barrier_wait(test_obj->barrier);
         test_obj->started = true;
-        s.start_server();
+        s.start_local_udp_server();
     }
 #endif
     return nullptr;
@@ -122,9 +122,9 @@ void stop_test_server()
 {
 #ifdef BUILD_ROOT
     if (test_obj->started) {
-        global_server::get_server().do_stop();
+        global_server::get_server().stop_local_udp_server();
         pthread_join(test_obj->pthread, nullptr);
-        global_server::destroy_server();
+        global_server::destroy_local_udp_server_instance();
         utils::destroy_buffer();
         pthread_barrier_destroy(test_obj->barrier);
         delete test_obj->barrier;

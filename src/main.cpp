@@ -20,16 +20,16 @@ int main(int argc, CH* const argv[])
 {
     utils::init_buffer_pool(128);
 
-    global_server::init_instance();
+    global_server::init_local_udp_server_instance();
     logging::init_logging();
     utils::config_system(argc, argv);
 
     auto& server = global_server::get_server();
 
-    server.init_server();
-    server.start_server();
+    server.init_local_udp_server();
+    server.start_local_udp_server();
 
-    global_server::destroy_server();
+    global_server::destroy_local_udp_server_instance();
     utils::destroy_buffer();
     logging::destroy_logger();
 

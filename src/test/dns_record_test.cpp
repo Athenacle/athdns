@@ -36,7 +36,7 @@ TEST(DNS_record, to_data_1)
         0x01, 0x00, 0x00, 0x01, 0x2c, 0x00, 0x04, 0x0d, 0x6b, 0x06, 0x9c};
 
 
-    DnsPacket *pack = DnsPacket::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
+    dns_packet *pack = dns_packet::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
     pack->parse();
     record_node *node = pack->generate_record_node();
 
@@ -47,7 +47,7 @@ TEST(DNS_record, to_data_1)
     }
     builder.set_id(pack->getQueryID()).set_opcode(DNS_OPCODE_STAND_QUERY);
 
-    DnsPacket *result = builder.build();
+    dns_packet *result = builder.build();
     result->parse();
 
     ASSERT_EQ(result->get_size(), pack->get_size());
@@ -71,7 +71,7 @@ TEST(DNS_record, to_data_2)
         0x09, 0x06, 0x6d, 0x61, 0x73, 0x74, 0x65, 0x72, 0xc0, 0x10, 0xc0, 0x55, 0x00, 0x01,
         0x00, 0x01, 0x00, 0x01, 0x51, 0x7f, 0x00, 0x04, 0x0a, 0x46, 0x14, 0x0b};
 
-    DnsPacket *pack = DnsPacket::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
+    dns_packet *pack = dns_packet::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
     pack->parse();
     record_node *node = pack->generate_record_node();
 
@@ -82,7 +82,7 @@ TEST(DNS_record, to_data_2)
     }
     builder.set_id(pack->getQueryID()).set_opcode(DNS_OPCODE_STAND_QUERY);
 
-    DnsPacket *result = builder.build();
+    dns_packet *result = builder.build();
     result->parse();
 
     ASSERT_EQ(result->get_size(), pack->get_size());

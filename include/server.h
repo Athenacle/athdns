@@ -22,12 +22,9 @@
 #include <semaphore.h>
 #include <sys/prctl.h>
 
-#include <map>
 #include <memory>
 #include <queue>
 #include <unordered_map>
-
-void uvcb_incoming_request_worker(uv_work_t *);
 
 void uvcb_incoming_request_response_send_complete(uv_udp_send_t *, int);
 
@@ -37,10 +34,7 @@ void uvcb_async_remote_response_send(uv_async_t *);
 
 class global_server
 {
-    friend void delete_timer_worker(uv_timer_t *);
-    friend void uvcb_async_stop_loop(uv_async_t *);
     friend void uvcb_async_response_send(uv_async_t *);
-    friend void uvcb_timer_cleaner(uv_timer_t *);
     friend void uvcb_async_remote_response_send(uv_async_t *async);
 
     using static_address_type = std::tuple<string, uint32_t>;
@@ -48,10 +42,12 @@ class global_server
 
     using forward_object = std::weak_ptr<objects::forward_response>;
 
+    // listen_address:     ip-string         port     listen_socket uv_udp_handle
     std::vector<std::tuple<const char *, uint16_t, sockaddr *, uv_udp_t *>> listen_address;
 
-    std::vector<remote::abstract_nameserver *> remote_address;
-    std::vector<static_address_type> *static_address;
+    std::vector<remote::abstract_nameserver *> upstream_nameservers;
+
+    std::vector<static_address_type> *static_listen_address;
 
     std::unordered_map<uint16_t, std::shared_ptr<objects::forward_response>> forward_table;
 
@@ -81,16 +77,13 @@ class global_server
     uv_async_t *sending_response_works;
 
     uv_timer_t current_time_timer;
-    uv_timer_t timer;
+    uv_timer_t reporter_timer;
 
-    pthread_spinlock_t queue_lock;
     pthread_spinlock_t forward_table_lock;
 
     sem_t queue_sem;
 
     int forward_type;
-
-    pthread_mutex_t sending_lock;
 
 #ifdef HAVE_DOH_SUPPORT
     pthread_mutex_t *sync_query_mutex;
@@ -129,8 +122,6 @@ public:                                           \
 #undef ADD_ALLOCATOR_POOL
 
 private:
-    void cleanup(uv_timer_t *);
-
     void init_server_loop();
 
     void destroy_ssl_libraries();
@@ -145,8 +136,6 @@ public:
     }
 
     void forward_item_submit(objects::forward_response *);
-
-    void send(objects::send_object *);
 
     void increase_request()
     {
@@ -183,24 +172,19 @@ public:
         return *table;
     }
 
-    pthread_spinlock_t *get_spinlock()
-    {
-        return &queue_lock;
-    }
-
     sem_t *get_semaphore()
     {
         return &queue_sem;
     }
 
-    static void destroy_server()
+    static void destroy_local_udp_server_instance()
     {
         if (server_instance != nullptr) {
             delete server_instance;
         }
     }
 
-    static void init_instance()
+    static void init_local_udp_server_instance()
     {
         server_instance = new global_server;
     }
@@ -249,20 +233,20 @@ public:
 
     const std::vector<remote::abstract_nameserver *> &get_remote_server() const
     {
-        return remote_address;
+        return upstream_nameservers;
     }
 
-    void init_server();
+    void init_local_udp_server();
 
-    void start_server();
+    void start_local_udp_server();
 
-    void do_stop();
+    void stop_local_udp_server();
 
     void response_from_remote(uv_buf_t *, remote::abstract_nameserver *);
 
     void cache_add_node(record_node *);
 
-    time_t get_time() const
+    time_t get_current_time() const
     {
         return current_time;
     }
@@ -275,6 +259,5 @@ public:
     void add_doh_nameserver(const char *);
 #endif
 };
-
 
 #endif

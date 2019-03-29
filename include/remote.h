@@ -35,14 +35,15 @@ namespace objects
         uv_buf_t *buf;
         ssize_t nsize;
         const sockaddr *sock;
-        dns::DnsPacket *pack;
+        dns::dns_packet *pack;
         uv_udp_t *udp;
-        request(dns::DnsPacket *p) : pack(p)
+
+        request(dns::dns_packet *p) : pack(p)
         {
             sock = nullptr;
         }
 
-        request(const uv_buf_t *, ssize_t, const sockaddr *, uv_udp_t *, dns::DnsPacket *p);
+        request(const uv_buf_t *, ssize_t, const sockaddr *, uv_udp_t *, dns::dns_packet *p);
 
         ~request();
         void set_forward_id(uint16_t fid)
@@ -128,7 +129,7 @@ namespace remote
     class abstract_nameserver
     {
     private:
-        sockaddr_in *sock;
+        sockaddr_in *upstream_socket;
         uv_loop_t *loop;
         uv_async_t *stop_async;
         pthread_t *work_thread;
@@ -187,7 +188,7 @@ namespace remote
 
         sockaddr *get_sock() const
         {
-            return reinterpret_cast<sockaddr *>(sock);
+            return reinterpret_cast<sockaddr *>(upstream_socket);
         }
 
         int get_index() const
@@ -205,11 +206,13 @@ namespace remote
             return this;
         }
 
-        void start_remote();
-        void stop_remote();
+        void start_upstream();
+        void stop_upstream();
 
         virtual void send(objects::send_object *) = 0;
-        void init_remote();
+
+        void init_upstream();
+
         virtual void destroy_remote() = 0;
 
         const ip_address &get_ip_address() const
@@ -236,7 +239,6 @@ namespace remote
 
     class udp_nameserver : public remote::abstract_nameserver
     {
-        // uv UDP handlers
         uv_udp_t *udp_handler;
         uv_async_t *async_send;
         pthread_mutex_t *sending_queue_mutex;
@@ -250,9 +252,14 @@ namespace remote
             uv_udp_recv_stop(udp_handler);
         }
 
+    private:
+        void init_upstream();
+
     public:
         udp_nameserver(const ip_address &&, int = 53);
+
         udp_nameserver(uint32_t, int = 53);
+
         virtual ~udp_nameserver() override;
 
         bool operator==(const ip_address &);
@@ -265,10 +272,10 @@ namespace remote
         void swap(const udp_nameserver &);
 
         virtual void send(objects::send_object *obj) override;
-        void init_remote();
+
         virtual void destroy_remote() override;
 
-        uv_udp_t *get_udp_hander() const
+        uv_udp_t *get_udp_handler() const
         {
             return udp_handler;
         }

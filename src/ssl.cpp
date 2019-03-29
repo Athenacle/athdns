@@ -245,7 +245,7 @@ void doh_nameserver::__openssl_write_bio()
     single_thread_check();
     do {
         char* buf = utils::get_buffer();
-        int hasread = BIO_read(write_bio, buf, recv_buffer_size);
+        int hasread = BIO_read(write_bio, buf, global_buffer_size);
         if (hasread <= 0) {
             utils::free_buffer(buf);
             return;

@@ -31,7 +31,7 @@ TEST(DNS, dnsTest1)
                               0x00, 0x00, 0x06, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x03,
                               0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01};
 
-    auto dp = DnsPacket::fromDataBuffer(packet_bytes, sizeof packet_bytes);
+    auto dp = dns_packet::fromDataBuffer(packet_bytes, sizeof packet_bytes);
     dp->parse();
     EXPECT_TRUE(dp->isQuery());
     EXPECT_FALSE(dp->isResponse());
@@ -41,8 +41,8 @@ TEST(DNS, dnsTest1)
 
     auto& q = dp->getQuery();
     EXPECT_STRCASEEQ("github.com", q.getName());
-    EXPECT_EQ(q.getType(), Query::QUERY_TYPE_A);
-    EXPECT_EQ(q.getClass(), Query::QUERY_CLASS_IN);
+    EXPECT_EQ(q.getType(), query::QUERY_TYPE_A);
+    EXPECT_EQ(q.getClass(), query::QUERY_CLASS_IN);
 
     delete dp;
 }
@@ -85,7 +85,7 @@ TEST(DNS, dnsTest2_large_response)
         0x01, 0x00, 0x01, 0x00, 0x00, 0x33, 0xf5, 0x00, 0x04, 0xc1, 0x6c, 0x58, 0x00, 0xc0, 0xbe,
         0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0x96, 0x52, 0x00, 0x04, 0x17, 0xd3, 0x85, 0xc0};
 
-    auto dp = DnsPacket::fromDataBuffer(packet_bytes, sizeof packet_bytes);
+    auto dp = dns_packet::fromDataBuffer(packet_bytes, sizeof packet_bytes);
     dp->parse();
     EXPECT_TRUE(dp->isResponse());
     EXPECT_EQ(dp->getFlag(), 0x8180);
@@ -200,7 +200,7 @@ TEST(DNS_utils, dns_package_builder_BASE)
     builder.as_query().set_opcode(DNS_OPCODE_STAND_QUERY).set_RD().set_resp_AnswerAuthenicated();
     builder.set_query("example.org").set_id(0);
 
-    DnsPacket* pack = builder.build();
+    dns_packet* pack = builder.build();
 
     EXPECT_EQ(pack->get_size(), sizeof(packet_bytes));
     EXPECT_TRUE(memcmp(pack->get_data(), packet_bytes, sizeof(packet_bytes)) == 0);
@@ -224,7 +224,7 @@ TEST(DNS_utils, dns_packet_builder_dns_packet)
                               0x00, 0x03, 0x77, 0x77, 0x77, 0x07, 0x65, 0x78, 0x61, 0x6d, 0x70,
                               0x6c, 0x65, 0x03, 0x63, 0x6f, 0x6d, 0x00, 0x00, 0x01, 0x00, 0x01};
 
-    auto packet = DnsPacket::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
+    auto packet = dns_packet::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
 
     packet->parse();
 
@@ -316,7 +316,7 @@ TEST(DNS, generate_record_node)
         0x61, 0x6d, 0x70, 0x6c, 0x65, 0x03, 0x6f, 0x72, 0x67, 0x00, 0x00, 0x01, 0x00, 0x01, 0xc0,
         0x0c, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x0d, 0x40, 0x00, 0x04, 0x5d, 0xb8, 0xd8, 0x22};
 
-    DnsPacket* pack = DnsPacket::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
+    dns_packet* pack = dns_packet::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
     auto node = pack->generate_record_node();
     record_node_A* p;
 
@@ -355,7 +355,7 @@ TEST(DNS, generate_record_node_CNAME)
     char name_1[] = "git.athenacle.xyz";
     char name_2[] = "master.athenacle.xyz";
 
-    DnsPacket* pack = DnsPacket::fromDataBuffer(buf, sizeof(buf));
+    dns_packet* pack = dns_packet::fromDataBuffer(buf, sizeof(buf));
     auto node = pack->generate_record_node();
     record_node_CNAME* cname;
 

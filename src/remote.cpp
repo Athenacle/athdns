@@ -23,7 +23,7 @@ using namespace remote;
 
 abstract_nameserver::~abstract_nameserver()
 {
-    delete sock;
+    delete upstream_socket;
     delete loop;
     delete stop_async;
     delete work_thread;
@@ -42,7 +42,7 @@ abstract_nameserver::abstract_nameserver()
     remote_address.reset(0);
     remote_port = 0;
     index = 0;
-    sock = nullptr;
+    upstream_socket = nullptr;
     loop = new uv_loop_t;
     loop->data = this;
     stop_async = new uv_async_t;
@@ -56,20 +56,20 @@ void abstract_nameserver::swap(abstract_nameserver& an)
     std::swap(remote_address, an.remote_address);
     std::swap(request_forward_count, an.request_forward_count);
     std::swap(response_count, an.response_count);
-    sock = an.sock;
-    an.sock = nullptr;
+    upstream_socket = an.upstream_socket;
+    an.upstream_socket = nullptr;
     index = an.index;
 }
 
 bool abstract_nameserver::init_socket()
 {
-    if (sock != nullptr) {
+    if (upstream_socket != nullptr) {
         return true;
     }
-    sock = new sockaddr_in;
+    upstream_socket = new sockaddr_in;
     string ip_string;
     remote_address.to_string(ip_string);
-    auto ret = uv_ip4_addr(ip_string.c_str(), remote_port, sock);
+    auto ret = uv_ip4_addr(ip_string.c_str(), remote_port, upstream_socket);
     if (ret < 0) {
         ERROR("init_socket failed");
     }
@@ -88,7 +88,7 @@ void abstract_nameserver::set_socket(const ip_address& ip, uint16_t port)
     init_socket();
 }
 
-void abstract_nameserver::start_remote()
+void abstract_nameserver::start_upstream()
 {
     const auto async_cb = [](uv_async_t* async) {
         abstract_nameserver* an = reinterpret_cast<abstract_nameserver*>(async->data);
@@ -107,7 +107,7 @@ void abstract_nameserver::start_remote()
     implement_do_startup();
 }
 
-void abstract_nameserver::stop_remote()
+void abstract_nameserver::stop_upstream()
 {
     uv_async_send(stop_async);
     pthread_join(*work_thread, nullptr);
@@ -137,7 +137,7 @@ udp_nameserver::udp_nameserver(uint32_t addr, int p) : remote::abstract_nameserv
     pthread_mutex_init(sending_queue_mutex, nullptr);
 }
 
-void udp_nameserver::init_remote()
+void udp_nameserver::init_upstream()
 {
     static const auto& complete = [](uv_udp_send_t* send, int flag) {
         if (unlikely(flag < 0)) {
@@ -173,6 +173,7 @@ void udp_nameserver::init_remote()
     uv_udp_init(l, udp_handler);
 }
 
+
 void udp_nameserver::send(objects::send_object* obj)
 {
     uv_udp_sending* sending = new uv_udp_sending;
@@ -197,13 +198,13 @@ void udp_nameserver::implement_do_startup()
     static const auto& thread_func = [](void* param) -> void* {
         auto pointer = reinterpret_cast<udp_nameserver*>(param);
         auto loop = pointer->get_loop();
-        auto udp = pointer->get_udp_hander();
+        auto udp = pointer->get_udp_handler();
         uv_udp_recv_start(udp, uvcb_server_incoming_alloc, uvcb_remote_udp_recv);
         uv_run(loop, UV_RUN_DEFAULT);
         return nullptr;
     };
 
-    init_remote();
+    init_upstream();
     pthread_create(get_thread(), nullptr, thread_func, this);
 }
 
@@ -236,7 +237,7 @@ void response::set_response(char* base, uint32_t size)
 
 // request
 request::request(
-    const uv_buf_t* buffer, ssize_t size, const sockaddr* addr, uv_udp_t* u, dns::DnsPacket* p)
+    const uv_buf_t* buffer, ssize_t size, const sockaddr* addr, uv_udp_t* u, dns::dns_packet* p)
     : nsize(size), pack(p)
 {
     buf = global_server::get_server().new_uv_buf_t();
