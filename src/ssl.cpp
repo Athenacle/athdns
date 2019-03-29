@@ -247,7 +247,7 @@ void doh_nameserver::__openssl_write_bio()
         char* buf = utils::get_buffer();
         int hasread = BIO_read(write_bio, buf, global_buffer_size);
         if (hasread <= 0) {
-            utils::free_buffer(buf);
+            utils::free_buffer(buf, global_buffer_size);
             return;
         } else {
             auto uvbuf = global_server::get_server().new_uv_buf_t();

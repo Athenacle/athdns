@@ -169,8 +169,8 @@ namespace
                     break;
                 }
         }
-        utils::free_buffer(nb);
-        utils::free_buffer(vb);
+        utils::free_buffer(nb, global_buffer_size);
+        utils::free_buffer(vb, global_buffer_size);
         return sh ? ((status >= 200 && status < 300) ? 0 : NGHTTP2_ERR_CALLBACK_FAILURE) : 0;
     }
 
@@ -199,8 +199,6 @@ namespace
         return 0;
     }
 }  // namespace
-
-// cbs
 
 namespace remote
 {
@@ -401,7 +399,7 @@ void doh_nameserver::send(uv_buf_t* buf)
                 WARN("sending failed: {0}", uv_strerror(f));
             }
             auto buf = reinterpret_cast<uv_buf_t*>(t->data);
-            utils::free_buffer(buf->base);
+            utils::free_buffer(buf->base, buf->len);
             global_server::get_server().delete_uv_buf_t(buf);
             delete t;
         });
@@ -690,7 +688,7 @@ void doh_nameserver::read(uv_stream_t*, ssize_t size, const uv_buf_t* buf)
             }
         }
     }
-    utils::free_buffer(buf->base);
+    utils::free_buffer(buf->base, buf->len);
 }
 
 void doh_nameserver::h2_terminate()
@@ -710,7 +708,7 @@ void doh_nameserver::ssl_fatal_error(int ec)
     }
     auto buf = utils::get_buffer();
     ERROR("ssl fatal error. {0}", ec);
-    utils::free_buffer(buf);
+    utils::free_buffer(buf, global_buffer_size);
 }
 
 void doh_nameserver::h2_start()
@@ -863,11 +861,8 @@ void doh_nameserver::h2_submit_data(int stream_id, const uint8_t* data, size_t l
     } else {
         if (itor->second->status_code == 200) {
             char* buf;
-            if (len > global_buffer_size) {
-                buf = new char[len];
-            } else {
-                buf = utils::get_buffer();
-            }
+            buf = utils::get_buffer(len);
+
             memcpy(buf, data, len);
             auto uvbuf = global_server::get_server().new_uv_buf_t();
             uvbuf->base = buf;

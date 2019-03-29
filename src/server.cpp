@@ -450,7 +450,7 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
     auto req = forward_table.find(forward_id);
     if (req == forward_table.end()) {
         pthread_spin_unlock(&forward_table_lock);
-        utils::free_buffer(buf->base);
+        utils::free_buffer(buf->base, buf->len);
         delete_uv_buf_t(buf);
     } else {
         const static shared_ptr<forward_response> empty(nullptr);
@@ -469,7 +469,7 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
             send_response(std::move(pointer));
 #ifdef HAVE_DOH_SUPPORT
         } else {
-            utils::free_buffer(buf->base);
+            utils::free_buffer(buf->base, buf->len);
             delete_uv_buf_t(buf);
             pthread_barrier_wait(internal_barrier);
         }

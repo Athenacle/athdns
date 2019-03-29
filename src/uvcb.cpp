@@ -28,13 +28,13 @@ void uvcb_server_incoming_recv(
 {
     if (unlikely((flag & UV_UDP_PARTIAL) == UV_UDP_PARTIAL)) {
         ERROR("udp received partical");
-        utils::free_buffer(buf->base);
+        utils::free_buffer(buf->base, global_buffer_size);
         return;
     }
 
     if (unlikely(nread < 0)) {
         ERROR("transmission error.");
-        utils::free_buffer(buf->base);
+        utils::free_buffer(buf->base, global_buffer_size);
         return;
     }
     if (unlikely(nread == 0)) {
@@ -46,7 +46,7 @@ void uvcb_server_incoming_recv(
         } else {
             TRACE("an empty datagram was received, skip this");
         }
-        utils::free_buffer(buf->base);
+        utils::free_buffer(buf->base, global_buffer_size);
         return;
     }
 
@@ -100,7 +100,7 @@ void uvcb_server_incoming_recv(
         }
     } else {
         TRACE("malformed packet received");
-        utils::free_buffer(buf->base);
+        utils::free_buffer(buf->base, global_buffer_size);
     }
 }
 
@@ -112,7 +112,7 @@ void uvcb_remote_udp_recv(
         } else {
             // recv empty udp diagram from remote nameserver, just ignore
         }
-        utils::free_buffer(buf->base);
+        utils::free_buffer(buf->base, global_buffer_size);
     } else {
         auto ns = reinterpret_cast<remote::udp_nameserver*>(udp->data);
         uv_buf_t* nbuf = global_server::get_server().new_uv_buf_t();

@@ -220,7 +220,7 @@ response::response(request* p) : req(p)
 response::~response()
 {
     if (response_buffer != nullptr) {
-        utils::free_buffer(response_buffer->base);
+        utils::free_buffer(response_buffer->base, response_buffer->len);
         global_server::get_server().delete_uv_buf_t(response_buffer);
     }
     delete req;
@@ -252,7 +252,7 @@ request::request(
 request::~request()
 {
     if (likely(sock != nullptr)) {
-        utils::free_buffer(buf->base);
+        utils::free_buffer(buf->base, buf->len);
         delete sock;
     }
     delete pack;

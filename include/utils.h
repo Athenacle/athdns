@@ -32,8 +32,8 @@ namespace utils
     bool check_uv_return_status(int, const char *);
 
     void init_buffer_pool(size_t);
-    char *get_buffer();
-    void free_buffer(char *);
+    char *get_buffer(size_t = 0);
+    void free_buffer(char *, size_t);
     void destroy_buffer();
 #ifndef NDEBUG
     size_t get_max_buffer_allocate();
