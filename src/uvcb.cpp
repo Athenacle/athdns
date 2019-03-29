@@ -26,8 +26,6 @@ void uvcb_server_incoming_alloc(uv_handle_t*, size_t, uv_buf_t* buf)
 void uvcb_server_incoming_recv(
     uv_udp_t* udp, ssize_t nread, const uv_buf_t* buf, const sockaddr* addr, unsigned int flag)
 {
-    static auto loop = global_server::get_server().get_main_loop();
-
     if (unlikely((flag & UV_UDP_PARTIAL) == UV_UDP_PARTIAL)) {
         ERROR("udp received partical");
         utils::free_buffer(buf->base);
@@ -46,65 +44,63 @@ void uvcb_server_incoming_recv(
         if (addr == nullptr) {
             // an empty datagram was received
         } else {
-            WARN("an empty datagram was received, skip this");
+            TRACE("an empty datagram was received, skip this");
         }
         utils::free_buffer(buf->base);
         return;
     }
+
+    static auto& server = global_server::get_server();
+    static auto& table = server.get_hashtable();
 
     dns::dns_parse_status status;
     DnsPacket* pack = DnsPacket::fromDataBuffer(buf, status);
     if (status == dns_parse_status::request_ok) {
         assert(pack != nullptr);
         auto req = new objects::request(buf, nread, addr, udp, pack);
-        uv_work_t* work = new uv_work_t;
-        work->data = req;
+        server.increase_request();
 
-        uv_queue_work(loop, work, uvcb_incoming_request_worker, [](uv_work_t* work, int) {
-            if (unlikely(work->data == nullptr)) {
-                //NOTE: when STOP string "stop.dnsserver.ok" received, work->data will be
-                //      set to nullptr. Please refer to `uvcb_incoming_request_worker'
-                global_server::get_server().do_stop();
+        auto name = pack->getQuery().getName();
+        if (unlikely(strcmp(name, "stop.dnsserver.ok") == 0)) {
+            delete req;
+            global_server::get_server().do_stop();
+        } else {
+            auto id = pack->getQueryID();
+            record_node* found = table.get(name);
+            if (found == nullptr) {
+                TRACE("IN request: ID #{0:x} -> {1}.", id, name);
+                forward_response* fitem = new forward_response(req);
+                server.forward_item_submit(fitem);
+            } else {
+                string text;
+                found->to_string(text);
+                TRACE("IN request: ID #{0:x} -> {1} : {2} (cached)", id, name, text);
+                DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
+                uv_buf_t* buf = global_server::get_server().new_uv_buf_t();
+                buf->base = utils::get_buffer();
+                buf->len = ret->get_size();
+                memmove(buf->base, ret->get_data(), ret->get_size());
+                uv_udp_send_t* sent = global_server::get_server().new_uv_udp_send_t();
+                sent->data = buf;
+                uv_udp_send(sent, udp, buf, 1, addr, [](uv_udp_send_t* sent, int f) {
+                    auto buf = reinterpret_cast<uv_buf_t*>(sent->data);
+                    if (unlikely(f < 0)) {
+                        DnsPacket* pack = DnsPacket::fromDataBuffer(buf);
+                        pack->parse();
+                        TRACE("sending failed for {0}: {1}",
+                              pack->getQuery().getName(),
+                              uv_strerror(f));
+                        delete pack;
+                    }
+                    global_server::get_server().delete_uv_buf_t(buf);
+                    global_server::get_server().delete_uv_udp_send_t(sent);
+                });
+                delete ret;
             }
-            delete work;
-        });
+        }
     } else {
         TRACE("malformed packet received");
         utils::free_buffer(buf->base);
-    }
-}
-
-void uvcb_incoming_request_worker(uv_work_t* work)
-{
-    auto& server = global_server::get_server();
-    auto& table = server.get_hashtable();
-
-    server.increase_request();
-    request* req = reinterpret_cast<request*>(work->data);
-
-    DnsPacket* pack = req->pack;
-
-    auto name = pack->getQuery().getName();
-    if (unlikely(strcmp(name, "stop.dnsserver.ok") == 0)) {
-        delete req;
-        work->data = nullptr;
-    } else {
-        auto id = pack->getQueryID();
-        record_node* found = table.get(name);
-        if (found == nullptr) {
-            DTRACE("IN request:  ID #{0:x} -> {1}. NOT Found", id, name);
-            forward_response* fitem = new forward_response(req);
-            server.forward_item_submit(fitem);
-        } else {
-            string text;
-            found->to_string(text);
-            DTRACE("IN request:  ID #{0:x} -> {1} : {2}", id, name, text);
-            DnsPacket* ret = DnsPacket::build_response_with_records(pack, found);
-            response* fitem = new response(req);
-            fitem->set_response(reinterpret_cast<char*>(ret->get_data()), ret->get_size());
-            std::unique_ptr<response> ptr(fitem);
-            server.send_response(std::move(ptr));
-        }
     }
 }
 
