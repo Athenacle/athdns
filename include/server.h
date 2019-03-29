@@ -101,23 +101,31 @@ class global_server
 
     void forward_item_all(forward_object);
 
-#define ADD_ALLOCATOR_POOL(__type)                \
-private:                                          \
-    utils::allocator_pool<__type> __type##_pool;  \
-                                                  \
-public:                                           \
-    template <class... Args>                      \
-    __type *new_##__type(const Args &... __args)  \
-    {                                             \
-        return __type##_pool.allocate(__args...); \
-    }                                             \
-    void delete_##__type(__type *p)               \
-    {                                             \
-        __type##_pool.deallocate(p);              \
+#define ADD_ALLOCATOR_POOL(__type, new_after, delete_before) \
+private:                                                     \
+    utils::allocator_pool<__type> __type##_pool;             \
+                                                             \
+public:                                                      \
+    template <class... Args>                                 \
+    __type *new_##__type(const Args &... __args)             \
+    {                                                        \
+        auto pointer = __type##_pool.allocate(__args...);    \
+        do {                                                 \
+            new_after                                        \
+        } while (false);                                     \
+        return pointer;                                      \
+    }                                                        \
+    void delete_##__type(__type *p)                          \
+    {                                                        \
+        do {                                                 \
+            delete_before                                    \
+        } while (false);                                     \
+        __type##_pool.deallocate(p);                         \
     }
 
-    ADD_ALLOCATOR_POOL(uv_buf_t)
-    ADD_ALLOCATOR_POOL(uv_udp_send_t)
+    ADD_ALLOCATOR_POOL(uv_buf_t, { pointer->base = nullptr; }, { utils::free_buffer(p->base); })
+
+    ADD_ALLOCATOR_POOL(uv_udp_send_t, {}, {})
 
 #undef ADD_ALLOCATOR_POOL
 

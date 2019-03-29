@@ -110,20 +110,15 @@ namespace utils
 
     char *get_buffer(size_t size)
     {
-        if (likely(size <= global_buffer_size)) {
-            return pool->allocate();
-        } else {
-            return reinterpret_cast<char *>(malloc(size));
-        }
+        return pool->allocate(size);
     }
 
-    void free_buffer(char *buffer, size_t size)
+    void free_buffer(char *buffer)
     {
-        if (likely(size <= global_buffer_size)) {
-            pool->deallocate(buffer);
-        } else {
-            free(buffer);
+        if (unlikely(buffer == nullptr)) {
+            return;
         }
+        pool->deallocate(buffer);
     }
 
     void destroy_buffer()

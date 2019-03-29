@@ -169,8 +169,8 @@ namespace
                     break;
                 }
         }
-        utils::free_buffer(nb, global_buffer_size);
-        utils::free_buffer(vb, global_buffer_size);
+        utils::free_buffer(nb);
+        utils::free_buffer(vb);
         return sh ? ((status >= 200 && status < 300) ? 0 : NGHTTP2_ERR_CALLBACK_FAILURE) : 0;
     }
 
@@ -399,7 +399,6 @@ void doh_nameserver::send(uv_buf_t* buf)
                 WARN("sending failed: {0}", uv_strerror(f));
             }
             auto buf = reinterpret_cast<uv_buf_t*>(t->data);
-            utils::free_buffer(buf->base, buf->len);
             global_server::get_server().delete_uv_buf_t(buf);
             delete t;
         });
@@ -688,7 +687,7 @@ void doh_nameserver::read(uv_stream_t*, ssize_t size, const uv_buf_t* buf)
             }
         }
     }
-    utils::free_buffer(buf->base, buf->len);
+    utils::free_buffer(buf->base);
 }
 
 void doh_nameserver::h2_terminate()
@@ -708,7 +707,7 @@ void doh_nameserver::ssl_fatal_error(int ec)
     }
     auto buf = utils::get_buffer();
     ERROR("ssl fatal error. {0}", ec);
-    utils::free_buffer(buf, global_buffer_size);
+    utils::free_buffer(buf);
 }
 
 void doh_nameserver::h2_start()
