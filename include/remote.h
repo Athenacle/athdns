@@ -120,18 +120,15 @@ namespace objects
     };
 
 }  // namespace objects
+
 namespace remote
 {
     class abstract_nameserver
     {
-    protected:
-        using sending_item_type = std::pair<uint16_t, std::weak_ptr<objects::forward_response>>;
-
     private:
         sockaddr_in *sock;
         uv_loop_t *loop;
         uv_async_t *stop_async;
-        pthread_mutex_t *sending_lock;
         pthread_t *work_thread;
 
         int remote_port;
@@ -139,7 +136,6 @@ namespace remote
         ip_address remote_address;
 
     protected:
-        std::map<uint16_t, std::weak_ptr<objects::forward_response>> sending;
         utils::atomic_int request_forward_count;
         utils::atomic_int response_count;
 
@@ -171,17 +167,6 @@ namespace remote
         bool init_socket();
 
         void swap(abstract_nameserver &);
-
-        bool find_erase(uint16_t);
-
-        void insert_sending(const sending_item_type &);
-
-        size_t get_sending_size() const
-        {
-            return sending.size();
-        }
-
-        int clean_sent();
 
         abstract_nameserver(uint32_t, int);
         abstract_nameserver();

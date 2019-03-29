@@ -82,8 +82,6 @@ class global_server
 
     uv_timer_t current_time_timer;
     uv_timer_t timer;
-    uv_timer_t cleanup_timer;
-
 
     pthread_spinlock_t queue_lock;
     pthread_spinlock_t forward_table_lock;

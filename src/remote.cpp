@@ -23,8 +23,6 @@ using namespace remote;
 
 abstract_nameserver::~abstract_nameserver()
 {
-    pthread_mutex_destroy(sending_lock);
-    delete sending_lock;
     delete sock;
     delete loop;
     delete stop_async;
@@ -43,8 +41,6 @@ abstract_nameserver::abstract_nameserver()
 {
     remote_address.reset(0);
     remote_port = 0;
-    sending_lock = new pthread_mutex_t;
-    pthread_mutex_init(sending_lock, nullptr);
     index = 0;
     sock = nullptr;
     loop = new uv_loop_t;
@@ -58,7 +54,6 @@ void abstract_nameserver::swap(abstract_nameserver& an)
 {
     std::swap(remote_port, an.remote_port);
     std::swap(remote_address, an.remote_address);
-    std::swap(sending, an.sending);
     std::swap(request_forward_count, an.request_forward_count);
     std::swap(response_count, an.response_count);
     sock = an.sock;
@@ -79,30 +74,6 @@ bool abstract_nameserver::init_socket()
         ERROR("init_socket failed");
     }
     return ret == 0;
-}
-
-int abstract_nameserver::clean_sent()
-{
-    return 0;
-}
-
-void abstract_nameserver::insert_sending(const sending_item_type& pair)
-{
-    pthread_mutex_lock(sending_lock);
-    sending.insert(pair);
-    pthread_mutex_unlock(sending_lock);
-}
-
-bool abstract_nameserver::find_erase(uint16_t id)
-{
-    pthread_mutex_lock(sending_lock);
-    auto itor = sending.find(id);
-    auto found = itor != sending.end();
-    if (found) {
-        sending.erase(itor);
-    }
-    pthread_mutex_unlock(sending_lock);
-    return found;
 }
 
 void abstract_nameserver::destroy_nameserver()
@@ -240,10 +211,17 @@ void udp_nameserver::implement_do_startup()
 using namespace dns;
 using namespace objects;
 
-response::response(request* p) : req(p) {}
+response::response(request* p) : req(p)
+{
+    response_buffer = nullptr;
+}
 
 response::~response()
 {
+    if (response_buffer != nullptr) {
+        utils::free_buffer(response_buffer->base);
+        global_server::get_server().delete_uv_buf_t(response_buffer);
+    }
     delete req;
 }
 
@@ -288,10 +266,4 @@ void forward_response::set_response(char* base, uint32_t size)
 }
 
 // forward response
-forward_response::~forward_response()
-{
-    utils::free_buffer(response_buffer->base);
-    global_server::get_server().delete_uv_buf_t(response_buffer);
-}
-
-// forward_item
+forward_response::~forward_response() {}

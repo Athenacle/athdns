@@ -81,15 +81,6 @@ ip_address* global_server::sync_internal_query_A(const char* domain)
 }
 #endif
 
-void global_server::cleanup(uv_timer_t*)
-{
-    int c = 0;
-    for (auto& ns : remote_address) {
-        c += ns->clean_sent();
-    }
-    DEBUG("cleaned up {0} item", c);
-}
-
 void global_server::add_remote_address(uint32_t ip)
 {
     remote::udp_nameserver* ns = new remote::udp_nameserver(ip);
@@ -113,9 +104,7 @@ void global_server::init_server_loop()
     uv_main_loop = uv_default_loop();
 
     auto status = uv_timer_init(uv_main_loop, &timer);
-
-    status = uv_timer_init(uv_main_loop, &cleanup_timer);
-    utils::check_uv_return_status(status, "timer cleaner init");
+    utils::check_uv_return_status(status, "timer reporter init");
 
     if (listen_address.size() == 0) {
         listen_address.emplace_back(std::make_tuple(strdup("0.0.0.0"), 53, nullptr, nullptr));
@@ -149,7 +138,6 @@ void global_server::init_server_loop()
         auto server = reinterpret_cast<global_server*>(work->data);
         static const auto& stop_cb = [](uv_handle_t* t, void*) { uv_close(t, nullptr); };
 
-        uv_timer_stop(&server->cleanup_timer);
         for (auto& listen : server->listen_address) {
             uv_udp_recv_stop(std::get<3>(listen));
         }
@@ -245,8 +233,6 @@ void global_server::start_server()
         ns->start_remote();
     }
 
-    static const auto& cleaner = std::bind(&global_server::cleanup, this, std::placeholders::_1);
-
     static const auto& current_time_timer_func = [](uv_timer_t* p) {
         static auto ct = reinterpret_cast<utils::atomic_number<time_t>*>(p->data);
         static utils::atomic_int count(0);
@@ -277,7 +263,6 @@ void global_server::start_server()
     };
     int reportt = timer_timeout * 1000;
 
-    uv_timer_start(&cleanup_timer, [](uv_timer_t* t) { cleaner(t); }, 10 * 1000, 10 * 1000);
     uv_timer_start(&timer, report_func, reportt, reportt);
     uv_timer_start(&current_time_timer, current_time_timer_func, 1000, 1000);
     for (auto& listen : listen_address) {
@@ -290,10 +275,6 @@ void global_server::start_server()
 
 global_server::~global_server()
 {
-    for (auto& ns : remote_address) {
-        WARN("existing {0}", ns->get_sending_size());
-    }
-
     if (uv_main_loop != nullptr) {
         uv_loop_close(uv_main_loop);
     }
@@ -400,7 +381,6 @@ void global_server::forward_item_all(weak_ptr<forward_response> forward)
             obj->sock = ns->get_sock();
             ns->send(obj);
             ns->increase_forward();
-            ns->insert_sending({item->get_forward_id(), forward});
             DTRACE("OUT request {0} -> {1}", item->get_request()->pack->getQuery().getName(), *ns);
         } else {
             delete obj;
@@ -452,7 +432,6 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
     }
     delete dpack;
 #endif
-    ns->find_erase(forward_id);
 
     pthread_spin_lock(&forward_table_lock);
     auto req = forward_table.find(forward_id);
