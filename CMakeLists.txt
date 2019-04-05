@@ -10,7 +10,7 @@ option(ATHDNS_USE_OPENSSL "Prefer OpenSSL as crypto library" ON)
 option(ATHDNS_USE_MBEDTLS "Prefer MBEDTLS as crypto library" OFF)
 option(ATHDNS_USE_JEMALLOC "Use jemalloc for malloc(3)" ON)
 
-
+message(STATUS "if want cross-build consider set -DCMAKE_FIND_ROOT_PATH=....")
 
 if (${ATHDNS_ENABLE_DOH})
   if (${ATHDNS_USE_OPENSSL} AND ${ATHDNS_USE_MBEDTLS})
@@ -69,7 +69,7 @@ if(${ATHDNS_ENABLE_DOH})
     else()
       set(HAVE_OPENSSL ON)
       include_directories(${OPENSSL_INCLUDE_DIR})
-      list(APPEND SSL_LIB ${OPENSSL_CRYPTO_LIBRARY} ${OPENSSL_SSL_LIBRARY})
+      list(APPEND SSL_LIB  ${OPENSSL_SSL_LIBRARY} ${OPENSSL_CRYPTO_LIBRARY})
     endif()
   else()
     if (${ATHDNS_USE_MBEDTLS})
@@ -122,6 +122,8 @@ if ((${CMAKE_CXX_COMPILER_ID} STREQUAL "Clang") OR
     Wuseless-cast)
 
   check_cxx_compiler_flag(-fno-permissive COMPILER_SUPPORT_FNOPERMISSIVE)
+
+  add_compile_options(-Wl,--as-needed)
 
   if (${COMPILER_SUPPORT_FNOPERMISSIVE})
     set(CMAKE_CXX_FLAGS "-fno-permissive ${CMAKE_CXX_FLAGS}")
@@ -231,6 +233,7 @@ target_link_libraries(${PROJECT_NAME} ${ATHDNS_LIBS})
 target_link_libraries(${PROJECT_NAME} ${LIBUV_LIBRARIES})
 
 if (${ATHDNS_ENABLE_DOH})
+  target_link_libraries(${PROJECT_NAME} dl)
   target_link_libraries(${PROJECT_NAME} ${NGHTTP2_LIBRARY} ${SSL_LIB})
 endif()
 

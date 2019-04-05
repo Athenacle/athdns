@@ -42,14 +42,5 @@ if ( UNIX )
     DOC "Specify library-locations that might contain the jemalloc library here."
   )
 
-  if ( JEMALLOC_LIBRARY )
-    if ( JEMALLOC_INCLUDE_DIR )
-      set( JEMALLOC_FOUND 1 )
-      message( STATUS "Found JEMALLOC library: ${JEMALLOC_LIBRARY}")
-    else ( JEMALLOC_INCLUDE_DIR )
-      message(FATAL_ERROR "Could not find jemalloc headers! Please install jemalloc libraries and headers")
-    endif ( JEMALLOC_INCLUDE_DIR )
-  endif ( JEMALLOC_LIBRARY )
-
-  mark_as_advanced( JEMALLOC_FOUND JEMALLOC_LIBRARY JEMALLOC_EXTRA_LIBRARIES JEMALLOC_INCLUDE_DIR )
+  find_package_handle_standard_args(JEMALLOC DEFAULT_MSG JEMALLOC_LIBRARY JEMALLOC_INCLUDE_DIR)
 endif (UNIX)
