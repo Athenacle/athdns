@@ -355,6 +355,34 @@ namespace dns
         return builder.build();
     }
 
+    namespace
+    {
+        uint8_t* generate_nodes(uint8_t* begin,
+                                uint8_t* end,
+                                int& count,
+                                std::vector<dns_value>& out)
+        {
+            int c = 0;
+            for (; begin < end;) {
+                dns_value v;
+                begin = dns_value::from_data(begin, end, v);
+                out.emplace_back(std::move(v));
+                c++;
+
+                if (c == count) {
+                    break;
+                }
+
+                if (begin != nullptr) {
+                } else {
+                    break;
+                }
+            }
+            count = c;
+            return begin;
+        }
+    }  // namespace
+
     record_node* dns_packet::generate_record_node()
     {
         uint8_t* pointer = data;
@@ -370,48 +398,38 @@ namespace dns
             return nullptr;
         }
         uint8_t* end = data + size;
-        int answer_count = 0;
 
         uint8_t* begin = pointer;
-        while (true) {
-            record_node* new_node;
-            uint16_t* p = reinterpret_cast<uint16_t*>(begin);
-            uint16_t offset = ntohs(*p) & 0x3fff;  // offset example: 0xc00c
-            uint16_t type = ntohs(*(p + 1));
-            uint16_t dlength = ntohs(*(p + 5));
 
-            const char* name;
+        std::vector<dns_value> values;
 
-            //next_pointer: begin + length of ( offset(2) + type(2) + class (2) + ttl(4) + data length(2) + data length
-            uint8_t* next_pointer = dlength + 2 + 2 + 2 + 4 + 2 + begin;
+        int c = getAnswerRRCount();
 
-            if (offset == 0xc) {
-                name = this_query.getName();
-            } else {
-                name = nullptr;
-            }
-            answer_count++;
-            switch (type) {
-                case DNS_TYPE_A:
-                    new_node = new record_node_A(data, begin, name);
-                    break;
-                case DNS_TYPE_CNAME:
-                    new_node = new record_node_CNAME(data, begin, name);
-                    break;
-                default:
-                    new_node = nullptr;
-            }
+        begin = generate_nodes(begin, end, c, values);
 
-            begin = next_pointer;
-            if (node == nullptr) {
-                node = new_node;
-            } else {
-                node->set_tail(new_node);
-            }
-            if (begin >= end || answer_count >= getAnswerRRCount() + getAuthorityRRCount()) {
-                break;
-            }
+        if (c != getAnswerRRCount()) {
+            return nullptr;
         }
+
+        node = new record_node(this_query.getName());
+
+        node->set_answers(values);
+
+        if (begin != nullptr) {
+            values.clear();
+
+            c = getAuthorityRRCount();
+
+            begin = generate_nodes(begin, end, c, values);
+
+            if (c != getAuthorityRRCount()) {
+                delete node;
+                return nullptr;
+            }
+
+            node->set_authority_answers(values);
+        }
+
         return node;
     }
 
@@ -469,10 +487,8 @@ namespace dns
 
     dns_package_builder::dns_package_builder()
     {
-        authority_pointer = answer_pointer = additional_pointer = query_pointer = nullptr;
-
-        query_length = answer_length = addition_length = authority_length = 0;
-
+        rdata = query_pointer = nullptr;
+        rdata_length = query_length = 0;
         flag_pointer = header + 2;
         memset(header, 0, sizeof(header));
         answer_count = auth_count = 0;
@@ -481,9 +497,7 @@ namespace dns
     dns_package_builder::~dns_package_builder()
     {
         delete[] query_pointer;
-        delete[] authority_pointer;
-        delete[] answer_pointer;
-        delete[] additional_pointer;
+        delete[] rdata;
     }
 
     reference dns_package_builder::set_id(uint16_t id)
@@ -586,7 +600,8 @@ namespace dns
         const int answer_count_offset = 3;
 
         auto ret = new dns_packet;
-        ret->size = 12 + query_length + answer_length + authority_length + addition_length;
+        ret->size = 12 + query_length + rdata_length;
+
         auto data = ret->data = new uint8_t[ret->size];
 
         uint16_t* ap = reinterpret_cast<uint16_t*>(header);
@@ -594,43 +609,25 @@ namespace dns
 
         memmove(data, header, 12);
         memmove(data + 12, query_pointer, query_length);
-        memmove(data + 12 + query_length, answer_pointer, answer_length);
-        memmove(data + 12 + query_length + answer_length, authority_pointer, authority_length);
-        memmove(data + 12 + query_length + answer_length + authority_length,
-                additional_pointer,
-                addition_length);
+        if (rdata_length != 0) {
+            memmove(data + 12 + query_length, rdata, rdata_length);
+        }
 
         return ret;
     }
 
     reference dns_package_builder::add_record(record_node* r)
     {
-        const int buffer_size = 256;
-        static uint8_t buffer[buffer_size];
-        int count = 0;
-        uint16_t offset = 0xc;
+        this->rdata_length = r->get_data_length();
+        this->rdata = new uint8_t[rdata_length + 10];
 
-        answer_count = 0;
-        auth_count = 0;
+        memset(this->rdata, 0xdf, rdata_length + 10);
 
-        answer_length = r->to_data(buffer, buffer_size, offset, answer_count, auth_count);
-        answer_pointer = new uint8_t[answer_length];
-        memmove(answer_pointer, buffer, answer_length * sizeof(uint8_t));
-        uint16_t* answer_rr_pointer = reinterpret_cast<uint16_t*>(header) + 3;
-        *answer_rr_pointer = htons(count);
-        return *this;
-    }
+        r->to_data(this->rdata);
 
-    reference dns_package_builder::set_answer_record(record_node* node)
-    {
-        const size_t size = 512;
-        answer_pointer = new uint8_t[512];  // buffer_allocate(512);
-        assert(query_length > 0);
-        assert(node != nullptr);
+        answer_count = r->get_answer_count();
+        auth_count = r->get_authority_count();
 
-        answer_count = auth_count = 0;
-
-        answer_length = node->to_data(answer_pointer, size, query_length, answer_count, auth_count);
         return *this;
     }
 

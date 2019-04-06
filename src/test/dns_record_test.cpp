@@ -35,16 +35,20 @@ TEST(DNS_record, to_data_1)
         0x00, 0x01, 0x00, 0x00, 0x01, 0x2c, 0x00, 0x02, 0xc0, 0x80, 0xc0, 0x80, 0x00, 0x01, 0x00,
         0x01, 0x00, 0x00, 0x01, 0x2c, 0x00, 0x04, 0x0d, 0x6b, 0x06, 0x9c};
 
-
     dns_packet *pack = dns_packet::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
     pack->parse();
+
     record_node *node = pack->generate_record_node();
 
     dns_package_builder builder;
-    builder.as_response().set_query(pack->getQuery()).set_answer_record(node);
+    builder.as_response().set_query(pack->getQuery());
+
+    builder.add_record(node);
+
     if (pack->isRD()) {
         builder.set_RD().set_resp_RA();
     }
+
     builder.set_id(pack->getQueryID()).set_opcode(DNS_OPCODE_STAND_QUERY);
 
     dns_packet *result = builder.build();
@@ -76,7 +80,7 @@ TEST(DNS_record, to_data_2)
     record_node *node = pack->generate_record_node();
 
     dns_package_builder builder;
-    builder.as_response().set_query(pack->getQuery()).set_answer_record(node);
+    builder.as_response().set_query(pack->getQuery()).add_record(node);
     if (pack->isRD()) {
         builder.set_RD().set_resp_RA();
     }

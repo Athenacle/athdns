@@ -184,10 +184,9 @@ void global_server::init_server_loop()
     utils::check_uv_return_status(status, "current_timer");
 }
 
-void global_server::set_static_ip(const string& domain, uint32_t ip)
+void global_server::set_static_ip(const string&, uint32_t)
 {
-    record_node_A* static_record = new record_node_A(domain.c_str(), ip);
-    table->put(static_record);
+    //TODO fix me
 }
 
 void global_server::add_static_ip(const string& domain, uint32_t ip)

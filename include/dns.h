@@ -301,16 +301,10 @@ namespace dns
         uint8_t *query_pointer;
         int query_length;
 
-        uint8_t *answer_pointer;
-        int answer_length;
-
-        uint8_t *authority_pointer;
-        int authority_length;
-
-        uint8_t *additional_pointer;
-        int addition_length;
-
         uint8_t *buffer;
+
+        uint32_t rdata_length;
+        uint8_t *rdata;
 
         static uint8_t *buffer_allocate(size_t);
         static void buffer_destroy(uint8_t *);
@@ -340,8 +334,6 @@ namespace dns
         reference set_query(const query &);
 
         reference add_record(record_node *);
-
-        reference set_answer_record(record_node *);
 
         dns_packet *build();
 
