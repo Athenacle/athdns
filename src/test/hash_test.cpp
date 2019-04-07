@@ -175,10 +175,7 @@ struct record_node_A : public record_node {
 
     record_node_A(const char *c, ip_address ip) : record_node(c), ip(ip) {}
 
-    ~record_node_A()
-    {
-        record_node::~record_node();
-    }
+    ~record_node_A() {}
 
     bool operator==(const ip_address &ad)
     {
