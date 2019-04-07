@@ -184,10 +184,9 @@ void global_server::init_server_loop()
     utils::check_uv_return_status(status, "current_timer");
 }
 
-void global_server::set_static_ip(const string& domain, uint32_t ip)
+void global_server::set_static_ip(const string&, uint32_t)
 {
-    record_node_A* static_record = new record_node_A(domain.c_str(), ip);
-    table->put(static_record);
+    //TODO fix me
 }
 
 void global_server::add_static_ip(const string& domain, uint32_t ip)
@@ -431,7 +430,7 @@ void global_server::send_response(std::shared_ptr<response> resp)
 void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameserver* ns)
 {
     uint16_t* p = reinterpret_cast<uint16_t*>(buf->base);
-    uint16_t forward_id = ntohs(*p);
+    uint16_t forward_id = utils::ntohs(*p);
 
 #ifdef DTRACE_OUTPUT
     dns_packet* dpack = dns_packet::fromDataBuffer(buf);

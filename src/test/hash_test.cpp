@@ -170,18 +170,47 @@ namespace
 
 const int rlen = 15;
 
+struct record_node_A : public record_node {
+    ip_address ip;
+
+    record_node_A(const char *c, ip_address ip) : record_node(c), ip(ip) {}
+
+    ~record_node_A()
+    {
+        record_node::~record_node();
+    }
+
+    bool operator==(const ip_address &ad)
+    {
+        return ip == ad;
+    }
+
+    bool operator==(const char *d)
+    {
+        return record_node::operator==(d);
+    }
+
+    bool operator==(const record_node_A &a)
+    {
+        auto &t = *this;
+        return t == (a.get_name()) && t == (a.ip);
+    }
+};
+
 TEST(hash_table, lru_test)
 {
     const int count = 2000;
     LRUCache<const CH *, record_node_A *> cache(count);
     hashtable table(count);
     vector<tuple<const CH *, ip_address> > vec;
+    vector<record_node_A *> as;
 
     vec.reserve(count * 2);
     for (int i = 0; i < count - 1; i++) {
         auto *str = random_string(rlen);
         ip_address ip(random_value());
         auto entry = new record_node_A(str, ip);
+        as.emplace_back(entry);
         table.put(entry);
         cache.put(str, entry);
         vec.emplace_back(make_tuple(str, ip));
@@ -221,7 +250,7 @@ TEST(hash_table, lru_test)
         auto &value = std::get<1>(iter);
         record_node_A *cache_the;
         bool cache_exists = cache.get(key, cache_the);
-        auto table_ptr = dynamic_cast<record_node_A *>(table.get(key));
+        auto table_ptr = reinterpret_cast<record_node_A *>(table.get(key));
         bool table_exists = table_ptr != nullptr;
         EXPECT_EQ(cache_exists, table_exists);
         EXPECT_EQ(cache.size(), table.get_saved());
@@ -260,7 +289,7 @@ TEST(hash_table, hash_test)
     for (auto &iter : vec) {
         auto &key = std::get<0>(iter);
         auto &value = std::get<1>(iter);
-        record_node_A *the = dynamic_cast<record_node_A *>(table.get(string(key)));
+        record_node_A *the = reinterpret_cast<record_node_A *>(table.get(string(key)));
         EXPECT_TRUE(the != nullptr);
         EXPECT_TRUE(the->operator==(value));
         EXPECT_EQ(vec.size(), table.get_saved());

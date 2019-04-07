@@ -43,7 +43,6 @@ using string = std::basic_string<CH>;
 // record.h
 class ip_address;
 class record_node;
-class record_node_A;
 
 // server.h
 class global_server;

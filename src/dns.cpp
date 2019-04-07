@@ -205,8 +205,8 @@ namespace dns
         }
         uint16_t* type_pointer =
             reinterpret_cast<uint16_t*>(start + length + DNS_FORMAT_HEADER_LENGTH + 1);
-        auto type = htons(*type_pointer);
-        auto clazz = htons(*(type_pointer + 1));
+        auto type = utils::htons(*type_pointer);
+        auto clazz = utils::htons(*(type_pointer + 1));
         if (type > DNS_TYPE_TXT) {
             delete[] name;
             return nullptr;
@@ -355,6 +355,34 @@ namespace dns
         return builder.build();
     }
 
+    namespace
+    {
+        uint8_t* generate_nodes(uint8_t* begin,
+                                uint8_t* end,
+                                int& count,
+                                std::vector<dns_value>& out)
+        {
+            int c = 0;
+            for (; begin < end;) {
+                dns_value v;
+                begin = dns_value::from_data(begin, end, v);
+                out.emplace_back(std::move(v));
+                c++;
+
+                if (c == count) {
+                    break;
+                }
+
+                if (begin != nullptr) {
+                } else {
+                    break;
+                }
+            }
+            count = c;
+            return begin;
+        }
+    }  // namespace
+
     record_node* dns_packet::generate_record_node()
     {
         uint8_t* pointer = data;
@@ -370,48 +398,38 @@ namespace dns
             return nullptr;
         }
         uint8_t* end = data + size;
-        int answer_count = 0;
 
         uint8_t* begin = pointer;
-        while (true) {
-            record_node* new_node;
-            uint16_t* p = reinterpret_cast<uint16_t*>(begin);
-            uint16_t offset = ntohs(*p) & 0x3fff;  // offset example: 0xc00c
-            uint16_t type = ntohs(*(p + 1));
-            uint16_t dlength = ntohs(*(p + 5));
 
-            const char* name;
+        std::vector<dns_value> values;
 
-            //next_pointer: begin + length of ( offset(2) + type(2) + class (2) + ttl(4) + data length(2) + data length
-            uint8_t* next_pointer = dlength + 2 + 2 + 2 + 4 + 2 + begin;
+        int c = getAnswerRRCount();
 
-            if (offset == 0xc) {
-                name = this_query.getName();
-            } else {
-                name = nullptr;
-            }
-            answer_count++;
-            switch (type) {
-                case DNS_TYPE_A:
-                    new_node = new record_node_A(data, begin, name);
-                    break;
-                case DNS_TYPE_CNAME:
-                    new_node = new record_node_CNAME(data, begin, name);
-                    break;
-                default:
-                    new_node = nullptr;
-            }
+        begin = generate_nodes(begin, end, c, values);
 
-            begin = next_pointer;
-            if (node == nullptr) {
-                node = new_node;
-            } else {
-                node->set_tail(new_node);
-            }
-            if (begin >= end || answer_count >= getAnswerRRCount() + getAuthorityRRCount()) {
-                break;
-            }
+        if (c != getAnswerRRCount()) {
+            return nullptr;
         }
+
+        node = new record_node(this_query.getName());
+
+        node->set_answers(values);
+
+        if (begin != nullptr) {
+            values.clear();
+
+            c = getAuthorityRRCount();
+
+            begin = generate_nodes(begin, end, c, values);
+
+            if (c != getAuthorityRRCount()) {
+                delete node;
+                return nullptr;
+            }
+
+            node->set_authority_answers(values);
+        }
+
         return node;
     }
 
@@ -434,8 +452,8 @@ namespace dns
             return -1;
         }
         auto pointer = reinterpret_cast<uint16_t*>(buf + ret);
-        pointer[0] = htons(type);
-        pointer[1] = htons(clazz);
+        pointer[0] = utils::htons(type);
+        pointer[1] = utils::htons(clazz);
 
         return ret + 4;
     }
@@ -469,10 +487,8 @@ namespace dns
 
     dns_package_builder::dns_package_builder()
     {
-        authority_pointer = answer_pointer = additional_pointer = query_pointer = nullptr;
-
-        query_length = answer_length = addition_length = authority_length = 0;
-
+        rdata = query_pointer = nullptr;
+        rdata_length = query_length = 0;
         flag_pointer = header + 2;
         memset(header, 0, sizeof(header));
         answer_count = auth_count = 0;
@@ -481,9 +497,7 @@ namespace dns
     dns_package_builder::~dns_package_builder()
     {
         delete[] query_pointer;
-        delete[] authority_pointer;
-        delete[] answer_pointer;
-        delete[] additional_pointer;
+        delete[] rdata;
     }
 
     reference dns_package_builder::set_id(uint16_t id)
@@ -586,51 +600,34 @@ namespace dns
         const int answer_count_offset = 3;
 
         auto ret = new dns_packet;
-        ret->size = 12 + query_length + answer_length + authority_length + addition_length;
+        ret->size = 12 + query_length + rdata_length;
+
         auto data = ret->data = new uint8_t[ret->size];
 
         uint16_t* ap = reinterpret_cast<uint16_t*>(header);
-        ap[answer_count_offset] = htons(answer_count);
+        ap[answer_count_offset] = utils::htons(answer_count);
 
         memmove(data, header, 12);
         memmove(data + 12, query_pointer, query_length);
-        memmove(data + 12 + query_length, answer_pointer, answer_length);
-        memmove(data + 12 + query_length + answer_length, authority_pointer, authority_length);
-        memmove(data + 12 + query_length + answer_length + authority_length,
-                additional_pointer,
-                addition_length);
+        if (rdata_length != 0) {
+            memmove(data + 12 + query_length, rdata, rdata_length);
+        }
 
         return ret;
     }
 
     reference dns_package_builder::add_record(record_node* r)
     {
-        const int buffer_size = 256;
-        static uint8_t buffer[buffer_size];
-        int count = 0;
-        uint16_t offset = 0xc;
+        this->rdata_length = r->get_data_length();
+        this->rdata = new uint8_t[rdata_length + 10];
 
-        answer_count = 0;
-        auth_count = 0;
+        memset(this->rdata, 0xdf, rdata_length + 10);
 
-        answer_length = r->to_data(buffer, buffer_size, offset, answer_count, auth_count);
-        answer_pointer = new uint8_t[answer_length];
-        memmove(answer_pointer, buffer, answer_length * sizeof(uint8_t));
-        uint16_t* answer_rr_pointer = reinterpret_cast<uint16_t*>(header) + 3;
-        *answer_rr_pointer = htons(count);
-        return *this;
-    }
+        r->to_data(this->rdata);
 
-    reference dns_package_builder::set_answer_record(record_node* node)
-    {
-        const size_t size = 512;
-        answer_pointer = new uint8_t[512];  // buffer_allocate(512);
-        assert(query_length > 0);
-        assert(node != nullptr);
+        answer_count = r->get_answer_count();
+        auth_count = r->get_authority_count();
 
-        answer_count = auth_count = 0;
-
-        answer_length = node->to_data(answer_pointer, size, query_length, answer_count, auth_count);
         return *this;
     }
 
@@ -641,3 +638,176 @@ namespace dns
     }
 
 }  // namespace dns
+
+
+// class ip_address
+void ip_address::to_string(string& buffer) const
+{
+    if (buffer.capacity() < 20) {
+        buffer.reserve(20);
+    }
+    uint32_t actual = utils::ntohl(address_);
+
+    char buf[8];
+    for (int i = 0; i < 4; i++) {
+        uint8_t part = (actual >> ((3 - i) * 8)) & 0xff;
+        snprintf(buf, 8, "%d.", part);
+        buffer.append(buf);
+    }
+    buffer.erase(buffer.length() - 1);
+}
+
+uint8_t* dns_value::from_data(uint8_t* begin, uint8_t* end, dns_value& v)
+{
+    uint16_t* p16 = reinterpret_cast<uint16_t*>(begin);
+    uint32_t* p32 = reinterpret_cast<uint32_t*>(begin + 6);
+    uint8_t* pv = begin + 12;
+
+    uint16_t name = (p16[0]);
+    uint16_t type = (p16[1]);
+    uint16_t clazz = (p16[2]);
+    uint32_t ttl = (*p32);
+    uint16_t length = (p16[5]);
+
+    uint16_t host_length = utils::ntohs(length);
+
+    uint8_t* value = new uint8_t[host_length];
+
+    memmove(value, pv, host_length);
+
+    v.raw.name = name;
+    v.raw.type = type;
+    v.raw.clazz = clazz;
+    v.raw.ttl = ttl;
+    v.raw.length = length;
+    v.length = host_length;
+
+    v.data = value;
+
+    begin = begin + 12 + host_length;
+
+    if (begin > end) {
+        return nullptr;
+    } else {
+        return begin;
+    }
+}
+
+uint8_t* dns_value::to_data(uint8_t* p) const
+{
+    const auto raw_size = sizeof(raw);
+
+    memmove(p, &raw, raw_size);
+    memmove(p + raw_size, data, length);
+    return p + raw_size + length;
+}
+
+// class record node
+
+ip_address* record_node::get_record_A() const
+{
+    for (int i = 0; i < answer_count; i++) {
+        auto& v = answer[i];
+        if (v.get_type() == utils::ntohs(dns::DNS_TYPE_A)) {
+            uint8_t* pdata = v.get_data();
+            uint32_t ip = utils::ntohl(*reinterpret_cast<uint32_t*>(pdata));
+            return new ip_address(ip);
+        }
+    }
+    return nullptr;
+}
+
+void record_node::to_string(string& str)
+{
+    str = name;
+}
+
+uint32_t record_node::get_data_length() const
+{
+    uint32_t ret = 0;
+    for (int i = 0; i < answer_count; i++) {
+        ret += answer[i].get_rdata_size();
+    }
+
+    for (int i = 0; i < authority_count; i++) {
+        ret += authority[i].get_rdata_size();
+    }
+    return ret;
+}
+
+void record_node::to_data(uint8_t* pointer) const
+{
+    uint8_t* p = pointer;
+    for (int i = 0; i < answer_count; i++) {
+        p = answer[i].to_data(p);
+    }
+
+    for (int i = 0; i < authority_count; i++) {
+        p = authority[i].to_data(p);
+    }
+
+#ifndef NDEBUG
+    auto end = pointer + get_data_length();
+    assert(end == p);
+#endif
+}
+
+record_node::record_node(domain_name n) : record_node()
+{
+    if (n != nullptr) {
+        name = utils::str_dump(n);
+    }
+}
+
+record_node::~record_node()
+{
+    if (name != nullptr) {
+        delete[] name;
+    }
+    delete[] answer;
+    delete[] authority;
+}
+
+void record_node::set_authority_answers(std::vector<dns_value>& an)
+{
+    this->authority_count = an.size();
+    this->authority = new dns_value[an.size()];
+
+    for (size_t i = 0; i < an.size(); i++) {
+        authority[i] = std::move(an[i]);
+    }
+}
+
+void record_node::set_answers(std::vector<dns_value>& an)
+{
+    this->answer_count = an.size();
+    this->answer = new dns_value[an.size()];
+
+    for (int i = 0; i < answer_count; i++) {
+        answer[i] = std::move(an[i]);
+    }
+}
+
+void record_node::swap_A()
+{
+    //TODO fix me
+    int firstA = 0;
+    for (; firstA < answer_count; firstA++) {
+        if (answer[firstA].get_type() == utils::ntohs(dns::DNS_TYPE_A)) {
+            break;
+        }
+    }
+    if (firstA >= answer_count - 1) {
+        // no A stored or only single A stored.
+        return;
+    }
+
+    dns_value last(std::move(answer[answer_count - 1]));
+    memmove(answer + firstA + 1, answer + firstA, sizeof(dns_value) * (answer_count - firstA - 1));
+    answer[firstA] = std::move(last);
+}
+
+bool record_node::operator==(domain_name dn) const
+{
+    return utils::str_equal(dn, name);
+}

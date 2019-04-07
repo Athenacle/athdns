@@ -15,8 +15,8 @@
 
 #include "fmt/format.h"
 
-#include <arpa/inet.h>
 #include "athdns.h"
+#include "utils.h"
 
 using domain_name = const char *;
 
@@ -29,12 +29,12 @@ class ip_address
 public:
     void reset(uint32_t ip)
     {
-        address_ = htonl(ip);
+        address_ = utils::htonl(ip);
     }
 
     ip_address(const ip_address &ip) : address_(ip.address_) {}
 
-    explicit ip_address(uint32_t ip) : address_(htonl(ip)) {}
+    explicit ip_address(uint32_t ip) : address_(utils::htonl(ip)) {}
 
     void to_string(string &) const;
 
@@ -43,7 +43,7 @@ public:
 
     bool operator==(uint32_t cmp) const
     {
-        return address_ == htonl(cmp);
+        return address_ == utils::htonl(cmp);
     }
 
     bool operator==(const ip_address &cmp) const
@@ -53,7 +53,7 @@ public:
 
     uint32_t get_address() const
     {
-        return ntohl(address_);
+        return utils::ntohl(address_);
     }
 
     const uint8_t *get_value_address() const
@@ -64,6 +64,110 @@ public:
 
 class hash_node;
 
+class dns_value
+{
+    struct __attribute__((packed)) __raw {
+        //NOTE: all data are stored as NET order.
+        uint16_t name;
+        uint16_t type;
+        uint16_t clazz;
+        // here should no padding
+        uint32_t ttl;
+        uint16_t length;
+    };
+
+    static_assert(sizeof(__raw) == (12), "dns_value size error, should be 12B");
+
+    __raw raw;
+
+    uint16_t length;
+
+    uint8_t *data;
+
+    void simple_copy(const dns_value &v)
+    {
+        raw.name = v.raw.name;
+        raw.type = v.raw.type;
+        raw.clazz = v.raw.clazz;
+        raw.ttl = v.raw.ttl;
+        raw.length = v.raw.length;
+
+        length = utils::ntohs(raw.length);
+    }
+
+public:
+    static uint8_t *from_data(uint8_t *begin, uint8_t *end, dns_value &);
+
+    size_t get_rdata_size()
+    {
+        return 12 + length;
+    }
+
+    dns_value(uint16_t name, uint16_t type, uint16_t clazz, uint32_t t, uint16_t length, uint8_t *v)
+    {
+        raw.name = name;
+        raw.type = type;
+        raw.clazz = clazz;
+        raw.ttl = t;
+        raw.length = length;
+
+        length = utils::ntohs(raw.length);
+
+        this->data = new uint8_t[length];
+        memmove(this->data, v, length);
+    }
+
+    dns_value(dns_value &&v)
+    {
+        *this = std::move(v);
+    }
+
+    void operator=(dns_value &&v)
+    {
+        simple_copy(v);
+        data = v.data;
+        v.data = nullptr;
+        length = v.length;
+    }
+
+    void operator=(const dns_value &v)
+    {
+        simple_copy(v);
+        auto l = utils::ntohs(raw.length);
+        this->data = new uint8_t[l];
+        memmove(this->data, v.data, l);
+
+        length = v.length;
+    }
+
+    dns_value()
+    {
+        memset(this, 0, sizeof(dns_value));
+    }
+
+    ~dns_value()
+    {
+        delete[] data;
+    }
+
+    uint8_t *to_data(uint8_t *) const;
+
+    uint16_t get_type() const
+    {
+        return raw.type;
+    }
+
+    uint16_t get_ttl() const
+    {
+        return raw.ttl;
+    }
+
+    uint8_t *get_data() const
+    {
+        return data;
+    }
+};
+
 class record_node
 {
     friend class hash_node;
@@ -71,51 +175,39 @@ class record_node
     friend class hash::hashtable;
 
     domain_name name;
-    uint32_t record_ttl;
 
-    reply_type type;
+    uint16_t answer_count;
+    uint16_t authority_count;
 
-    uint16_t offset;
-
-    void fill_data(uint8_t *) const;
-
-protected:
-    record_node *node_next;
-
-    uint16_t record_type;
-    uint16_t record_class;
-    uint16_t record_data_length;
-
-    bool domain_name_equal(domain_name) const;
-
-    void set_type(uint16_t t)
-    {
-        record_type = t;
-    }
-
-    void set_class(uint16_t c)
-    {
-        record_class = c;
-    }
-
-    void set_data_length(uint16_t dl)
-    {
-        record_data_length = dl;
-    }
-
-    virtual void set_value();
-
-    record_node(uint8_t *, uint8_t *, domain_name);
-
-    void shared_data_fill_offset(uint8_t *, uint16_t) const;
-
-    virtual const uint8_t *get_value() const = 0;
+    dns_value *answer;
+    dns_value *authority;
 
 public:
-    record_node();
+    void set_answers(std::vector<dns_value> &);
+    void set_authority_answers(std::vector<dns_value> &);
+
+    uint32_t get_answer_count() const
+    {
+        return answer_count;
+    }
+
+    uint16_t get_authority_count() const
+    {
+        return authority_count;
+    }
+
+    void to_data(uint8_t *) const;
+
+    uint32_t get_data_length() const;
+
+    record_node()
+    {
+        memset(this, 0, sizeof(*this));
+    }
+
     explicit record_node(domain_name);
 
-    virtual ~record_node();
+    ~record_node();
 
     domain_name get_name() const
     {
@@ -126,72 +218,11 @@ public:
 
     bool operator==(domain_name) const;
 
-    void *operator new(size_t);
-
-    void operator delete(void *);
-
-    void get_value(uint32_t &, uint16_t &, uint16_t &, uint16_t &) const;
-
-    void set_ttl(uint32_t ttl)
-    {
-        record_ttl = ttl;
-    }
-
-    void set_tail(record_node *);
-
-    int next_count() const;
-
-    record_node *get_next() const
-    {
-        return node_next;
-    }
-
-    virtual void to_string(string &) const = 0;
-
-    int to_data(
-        uint8_t *buffer, size_t buf_size, int, uint16_t &rr_count, uint16_t &ra_count) const;
+    void to_string(string &);
 
     ip_address *get_record_A() const;
-};
 
-class record_node_A : public record_node
-{
-    ip_address address;
-
-    virtual void set_value() override;
-
-protected:
-    virtual const uint8_t *get_value() const override;
-
-public:
-    record_node_A();
-    record_node_A(uint8_t *, uint8_t *, domain_name);
-
-    record_node_A(domain_name, ip_address &);
-    record_node_A(domain_name, uint32_t);
-
-    virtual ~record_node_A();
-
-    bool operator==(const record_node_A &) const;
-    bool operator==(const ip_address &) const;
-
-    virtual void to_string(string &) const override;
-};
-
-class record_node_CNAME : public record_node
-{
-    domain_name actual_name;
-    uint8_t *value;
-
-protected:
-    virtual const uint8_t *get_value() const override;
-
-public:
-    record_node_CNAME(uint8_t *, uint8_t *, domain_name);
-    virtual ~record_node_CNAME();
-
-    virtual void to_string(string &) const override;
-    domain_name get_actual_name() const;
+    void swap_A();
 };
 
 class hash_node
@@ -227,9 +258,11 @@ class hash_node
         return value;
     }
 
-    void swap_A();
+    void swap_A()
+    {
+        value->swap_A();
+    }
 };
-
 
 namespace fmt
 {
@@ -242,15 +275,9 @@ namespace fmt
         }
 
         template <typename FC>
-        auto format(const record_node &p, FC &ctx)
+        auto format(const record_node &, FC &ctx)
         {
-            string str;
-            p.to_string(str);
-            if (p.get_next() == nullptr) {
-                return format_to(ctx.begin(), "{0}->{1}", p.get_name(), str);
-            } else {
-                return format_to(ctx.begin(), "{0}->{1}->{2}", p.get_name(), str, *p.get_next());
-            }
+            return format_to(ctx.begin(), "node");
         }
     };
 
