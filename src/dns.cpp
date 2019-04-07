@@ -668,7 +668,9 @@ uint8_t* dns_value::from_data(uint8_t* begin, uint8_t* end, dns_value& v)
     uint16_t clazz = (p16[2]);
     uint32_t ttl = (*p32);
     uint16_t length = (p16[5]);
+
     uint16_t host_length = utils::ntohs(length);
+
     uint8_t* value = new uint8_t[host_length];
 
     memmove(value, pv, host_length);
@@ -678,6 +680,7 @@ uint8_t* dns_value::from_data(uint8_t* begin, uint8_t* end, dns_value& v)
     v.raw.clazz = clazz;
     v.raw.ttl = ttl;
     v.raw.length = length;
+    v.length = host_length;
 
     v.data = value;
 
@@ -693,11 +696,10 @@ uint8_t* dns_value::from_data(uint8_t* begin, uint8_t* end, dns_value& v)
 uint8_t* dns_value::to_data(uint8_t* p) const
 {
     const auto raw_size = sizeof(raw);
-    const auto len = utils::ntohs(raw.length);
 
     memmove(p, &raw, raw_size);
-    memmove(p + raw_size, data, len);
-    return p + raw_size + len;
+    memmove(p + raw_size, data, length);
+    return p + raw_size + length;
 }
 
 // class record node

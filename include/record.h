@@ -80,6 +80,8 @@ class dns_value
 
     __raw raw;
 
+    uint16_t length;
+
     uint8_t *data;
 
     void simple_copy(const dns_value &v)
@@ -89,6 +91,8 @@ class dns_value
         raw.clazz = v.raw.clazz;
         raw.ttl = v.raw.ttl;
         raw.length = v.raw.length;
+
+        length = utils::ntohs(raw.length);
     }
 
 public:
@@ -96,7 +100,7 @@ public:
 
     size_t get_rdata_size()
     {
-        return 12 + utils::ntohs(raw.length);
+        return 12 + length;
     }
 
     dns_value(uint16_t name, uint16_t type, uint16_t clazz, uint32_t t, uint16_t length, uint8_t *v)
@@ -107,9 +111,10 @@ public:
         raw.ttl = t;
         raw.length = length;
 
-        auto l = utils::ntohs(length);
-        this->data = new uint8_t[l];
-        memmove(this->data, v, l);
+        length = utils::ntohs(raw.length);
+
+        this->data = new uint8_t[length];
+        memmove(this->data, v, length);
     }
 
     dns_value(dns_value &&v)
@@ -122,6 +127,7 @@ public:
         simple_copy(v);
         data = v.data;
         v.data = nullptr;
+        length = v.length;
     }
 
     void operator=(const dns_value &v)
@@ -130,6 +136,8 @@ public:
         auto l = utils::ntohs(raw.length);
         this->data = new uint8_t[l];
         memmove(this->data, v.data, l);
+
+        length = v.length;
     }
 
     dns_value()
