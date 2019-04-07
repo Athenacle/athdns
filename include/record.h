@@ -70,10 +70,20 @@ class __attribute__((packed)) dns_value
     uint16_t name;
     uint16_t type;
     uint16_t clazz;
+    // here should no padding
     uint32_t ttl;
     uint16_t length;
 
     uint8_t *data;
+
+    void simple_copy(const dns_value &v)
+    {
+        name = v.name;
+        type = v.type;
+        clazz = v.clazz;
+        ttl = v.ttl;
+        length = v.length;
+    }
 
 public:
     static uint8_t *from_data(uint8_t *begin, uint8_t *end, dns_value &);
@@ -144,6 +154,10 @@ public:
 
 class record_node
 {
+    static_assert(sizeof(dns_value) == (12 + sizeof(uint8_t *)),
+                  "dns_value size error, should be 20B (on 64bit system) "
+                  "or 16B (on 32bit)");
+
     friend class hash_node;
     friend class dns_package_builder;
     friend class hash::hashtable;
