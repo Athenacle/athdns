@@ -46,6 +46,7 @@ class record_node;
 
 // server.h
 class global_server;
+class requery;
 
 // dns.h
 namespace dns

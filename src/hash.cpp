@@ -13,6 +13,7 @@
 #include "hash.h"
 #include "athdns.h"
 #include "logging.h"
+#include "server.h"
 
 #include <pthread.h>
 
@@ -70,25 +71,46 @@ namespace hash
         });
     }
 
-    void hashtable::put(record_node *new_pointer)
+    hashtable::result hashtable::put(record_node *new_pointer)
     {
+        result ret = result::insert;
+
         if (unlikely(new_pointer == nullptr)) {
-            return;
+            return result::no_op;
         }
+
         auto &entry = container;
         pthread_rwlock_rdlock(&table_rwlock);
         auto iter = entry.find(new_pointer->get_name());
         pthread_rwlock_unlock(&table_rwlock);
         hash_node *nn = new hash_node(new_pointer);
+
         if (iter != entry.end()) {
-            delete new_pointer;
-            return;
-        } else {
-            pthread_rwlock_wrlock(&table_rwlock);
-            entry.insert({new_pointer->get_name(), nn});
-            saved++;
-            pthread_rwlock_unlock(&table_rwlock);
+            auto t = iter->second->operator->()->get_expire_time();
+            auto cur = global_server::get_server().get_current_time();
+            if (t > cur) {
+                delete new_pointer;
+                return result::no_op;
+            } else {
+                DTRACE("replace {0}(expired at {1}) with {2}(expire at {3})",
+                       iter->second->get_node()->get_name(),
+                       iter->second->get_node()->get_expire_time(),
+                       new_pointer->get_name(),
+                       new_pointer->get_expire_time());
+
+                pthread_rwlock_wrlock(&table_rwlock);
+                delete iter->second;
+                saved--;
+                entry.erase(iter);
+                pthread_rwlock_unlock(&table_rwlock);
+                ret = result::update;
+            }
         }
+
+        pthread_rwlock_wrlock(&table_rwlock);
+        entry.insert({new_pointer->get_name(), nn});
+        saved++;
+        pthread_rwlock_unlock(&table_rwlock);
 
         pthread_spin_lock(&lru_lock);
         if (unlikely(lru_head == nullptr)) {
@@ -117,6 +139,7 @@ namespace hash
             DTRACE("LRU: remove old item {0}", *old_end->get_node());
             delete old_end;
         }
+        return ret;
     }
 
     record_node *hashtable::get(const string &str)
