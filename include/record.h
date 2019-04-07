@@ -103,22 +103,19 @@ public:
 
     dns_value(dns_value &&v)
     {
-        name = v.name;
-        type = v.type;
-        clazz = v.clazz;
-        ttl = v.ttl;
-        length = v.length;
+        *this = std::move(v);
+    }
+
+    void operator=(dns_value &&v)
+    {
+        simple_copy(v);
         data = v.data;
         v.data = nullptr;
     }
 
-    void set(const dns_value &v)
+    void operator=(const dns_value &v)
     {
-        name = v.name;
-        type = v.type;
-        clazz = v.clazz;
-        ttl = v.ttl;
-        length = v.length;
+        simple_copy(v);
         auto l = ntohs(length);
         this->data = new uint8_t[l];
         memmove(this->data, v.data, l);

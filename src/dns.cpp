@@ -758,37 +758,27 @@ record_node::~record_node()
     if (name != nullptr) {
         delete[] name;
     }
-    for (int i = 0; i < answer_count; i++) {
-        (answer + i)->~dns_value();
-    }
-    free(answer);
-
-    for (int i = 0; i < authority_count; i++) {
-        (authority + i)->~dns_value();
-    }
-    free(authority);
+    delete[] answer;
+    delete[] authority;
 }
 
 void record_node::set_authority_answers(std::vector<dns_value>& an)
 {
     this->authority_count = an.size();
-    this->authority =
-        reinterpret_cast<dns_value*>(malloc(this->authority_count * sizeof(dns_value)));
+    this->authority = new dns_value[an.size()];
 
     for (size_t i = 0; i < an.size(); i++) {
-        auto pa = authority + i;
-        new (pa) dns_value(std::move(an[i]));
+        authority[i] = std::move(an[i]);
     }
 }
 
 void record_node::set_answers(std::vector<dns_value>& an)
 {
     this->answer_count = an.size();
-    this->answer = reinterpret_cast<dns_value*>(malloc(this->answer_count * sizeof(dns_value)));
+    this->answer = new dns_value[an.size()];
 
     for (int i = 0; i < answer_count; i++) {
-        auto pa = answer + i;
-        new (pa) dns_value(std::move(an[i]));
+        answer[i] = std::move(an[i]);
     }
 }
 
