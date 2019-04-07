@@ -785,6 +785,20 @@ void record_node::set_answers(std::vector<dns_value>& an)
 void record_node::swap_A()
 {
     //TODO fix me
+    int firstA = 0;
+    for (; firstA < answer_count; firstA++) {
+        if (answer[firstA].get_type() == ntohs(dns::DNS_TYPE_A)) {
+            break;
+        }
+    }
+    if (firstA >= answer_count - 1) {
+        // no A stored or only single A stored.
+        return;
+    }
+
+    dns_value last(std::move(answer[answer_count - 1]));
+    memmove(answer + firstA + 1, answer + firstA, sizeof(dns_value) * (answer_count - firstA - 1));
+    answer[firstA] = std::move(last);
 }
 
 bool record_node::operator==(domain_name dn) const
