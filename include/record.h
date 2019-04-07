@@ -15,8 +15,8 @@
 
 #include "fmt/format.h"
 
-#include <arpa/inet.h>
 #include "athdns.h"
+#include "utils.h"
 
 using domain_name = const char *;
 
@@ -29,12 +29,12 @@ class ip_address
 public:
     void reset(uint32_t ip)
     {
-        address_ = htonl(ip);
+        address_ = utils::htonl(ip);
     }
 
     ip_address(const ip_address &ip) : address_(ip.address_) {}
 
-    explicit ip_address(uint32_t ip) : address_(htonl(ip)) {}
+    explicit ip_address(uint32_t ip) : address_(utils::htonl(ip)) {}
 
     void to_string(string &) const;
 
@@ -43,7 +43,7 @@ public:
 
     bool operator==(uint32_t cmp) const
     {
-        return address_ == htonl(cmp);
+        return address_ == utils::htonl(cmp);
     }
 
     bool operator==(const ip_address &cmp) const
@@ -53,7 +53,7 @@ public:
 
     uint32_t get_address() const
     {
-        return ntohl(address_);
+        return utils::ntohl(address_);
     }
 
     const uint8_t *get_value_address() const
@@ -90,13 +90,13 @@ public:
 
     size_t get_rdata_size()
     {
-        return 12 + ntohs(length);
+        return 12 + utils::ntohs(length);
     }
 
     dns_value(uint16_t name, uint16_t type, uint16_t clazz, uint32_t t, uint16_t length, uint8_t *v)
         : name(name), type(type), clazz(clazz), ttl(t), length(length)
     {
-        auto l = ntohs(length);
+        auto l = utils::ntohs(length);
         this->data = new uint8_t[l];
         memmove(this->data, v, l);
     }
@@ -116,7 +116,7 @@ public:
     void operator=(const dns_value &v)
     {
         simple_copy(v);
-        auto l = ntohs(length);
+        auto l = utils::ntohs(length);
         this->data = new uint8_t[l];
         memmove(this->data, v.data, l);
     }

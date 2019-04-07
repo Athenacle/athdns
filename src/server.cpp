@@ -430,7 +430,7 @@ void global_server::send_response(std::shared_ptr<response> resp)
 void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameserver* ns)
 {
     uint16_t* p = reinterpret_cast<uint16_t*>(buf->base);
-    uint16_t forward_id = ntohs(*p);
+    uint16_t forward_id = utils::ntohs(*p);
 
 #ifdef DTRACE_OUTPUT
     dns_packet* dpack = dns_packet::fromDataBuffer(buf);
