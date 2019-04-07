@@ -406,6 +406,55 @@ namespace utils
 
         bool operator==(const time_object &) const;
     };
+
+#ifdef LITTLE_ENDIAN
+    constexpr uint16_t swap_16(uint16_t data)
+    {
+        return (data << 8) | (data >> 8);
+    }
+
+    constexpr uint32_t swap_32(uint32_t data)
+    {
+        return data >> 24 | (data >> 8 & 0xff00) | (data << 8 & 0xff0000) | data << 24;
+    }
+#endif
+
+    constexpr uint16_t ntohs(uint16_t data)
+    {
+#ifdef LITTLE_ENDIAN
+        return swap_16(data);
+#else
+        return data;
+#endif
+    }
+
+    constexpr uint32_t ntohl(uint32_t data)
+    {
+#ifdef LITTLE_ENDIAN
+        return swap_32(data);
+#else
+        return data;
+#endif
+    }
+
+    constexpr uint16_t htons(uint16_t data)
+    {
+#ifdef LITTLE_ENDIAN
+        return swap_16(data);
+#else
+        return data;
+#endif
+    }
+
+    constexpr uint32_t htonl(uint32_t data)
+    {
+#ifdef LITTLE_ENDIAN
+        return swap_32(data);
+#else
+        return data;
+#endif
+    }
+
 }  // namespace utils
 
 namespace fmt
