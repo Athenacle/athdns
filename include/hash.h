@@ -120,7 +120,7 @@ namespace hash
         hashtable(size_type size);
         ~hashtable();
 
-        void put(record_node *);
+        bool put(record_node *);
 
         pointer get(const string &);
         pointer get(domain_name);

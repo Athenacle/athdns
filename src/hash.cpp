@@ -70,10 +70,10 @@ namespace hash
         });
     }
 
-    void hashtable::put(record_node *new_pointer)
+    bool hashtable::put(record_node *new_pointer)
     {
         if (unlikely(new_pointer == nullptr)) {
-            return;
+            return false;
         }
         auto &entry = container;
         pthread_rwlock_rdlock(&table_rwlock);
@@ -82,7 +82,7 @@ namespace hash
         hash_node *nn = new hash_node(new_pointer);
         if (iter != entry.end()) {
             delete new_pointer;
-            return;
+            return false;
         } else {
             pthread_rwlock_wrlock(&table_rwlock);
             entry.insert({new_pointer->get_name(), nn});
@@ -117,6 +117,7 @@ namespace hash
             DTRACE("LRU: remove old item {0}", *old_end->get_node());
             delete old_end;
         }
+        return true;
     }
 
     record_node *hashtable::get(const string &str)
