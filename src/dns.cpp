@@ -209,8 +209,8 @@ namespace dns
         }
         uint16_t* type_pointer =
             reinterpret_cast<uint16_t*>(start + length + DNS_FORMAT_HEADER_LENGTH + 1);
-        auto type = utils::htons(*type_pointer);
-        auto clazz = utils::htons(*(type_pointer + 1));
+        auto type = utils::host_to_net_16(*type_pointer);
+        auto clazz = utils::host_to_net_16(*(type_pointer + 1));
         if (type > DNS_TYPE_TXT) {
             delete[] name;
             return nullptr;
@@ -456,8 +456,8 @@ namespace dns
             return -1;
         }
         auto pointer = reinterpret_cast<uint16_t*>(buf + ret);
-        pointer[0] = utils::htons(type);
-        pointer[1] = utils::htons(clazz);
+        pointer[0] = utils::host_to_net_16(type);
+        pointer[1] = utils::host_to_net_16(clazz);
 
         return ret + 4;
     }
@@ -609,7 +609,7 @@ namespace dns
         auto data = ret->data = new uint8_t[ret->size];
 
         uint16_t* ap = reinterpret_cast<uint16_t*>(header);
-        ap[answer_count_offset] = utils::htons(answer_count);
+        ap[answer_count_offset] = utils::host_to_net_16(answer_count);
 
         memmove(data, header, 12);
         memmove(data + 12, query_pointer, query_length);
@@ -650,7 +650,7 @@ void ip_address::to_string(string& buffer) const
     if (buffer.capacity() < 20) {
         buffer.reserve(20);
     }
-    uint32_t actual = utils::ntohl(address_);
+    uint32_t actual = utils::net_to_host_32(address_);
 
     char buf[8];
     for (int i = 0; i < 4; i++) {
@@ -673,7 +673,7 @@ uint8_t* dns_value::from_data(uint8_t* begin, uint8_t* end, dns_value& v)
     uint32_t ttl = (*p32);
     uint16_t length = (p16[5]);
 
-    uint16_t host_length = utils::ntohs(length);
+    uint16_t host_length = utils::net_to_host_16(length);
 
     uint8_t* value = new uint8_t[host_length];
 
@@ -707,7 +707,7 @@ uint8_t* dns_value::to_data(uint8_t* p) const
     memmove(p + raw_size, data, length);
 
     uint32_t* ttlp = reinterpret_cast<uint32_t*>(p + 6);
-    *ttlp = utils::htonl(expire_time - t);
+    *ttlp = utils::host_to_net_32(expire_time - t);
     return p + raw_size + length;
 }
 
@@ -717,9 +717,9 @@ ip_address* record_node::get_record_A() const
 {
     for (int i = 0; i < answer_count; i++) {
         auto& v = answer[i];
-        if (v.get_type() == utils::ntohs(dns::DNS_TYPE_A)) {
+        if (v.get_type() == utils::net_to_host_16(dns::DNS_TYPE_A)) {
             uint8_t* pdata = v.get_data();
-            uint32_t ip = utils::ntohl(*reinterpret_cast<uint32_t*>(pdata));
+            uint32_t ip = utils::net_to_host_32(*reinterpret_cast<uint32_t*>(pdata));
             return new ip_address(ip);
         }
     }
@@ -808,7 +808,7 @@ void record_node::swap_A()
     //TODO fix me
     int firstA = 0;
     for (; firstA < answer_count; firstA++) {
-        if (answer[firstA].get_type() == utils::ntohs(dns::DNS_TYPE_A)) {
+        if (answer[firstA].get_type() == utils::net_to_host_16(dns::DNS_TYPE_A)) {
             break;
         }
     }

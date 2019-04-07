@@ -48,7 +48,7 @@ namespace objects
         ~request();
         void set_forward_id(uint16_t fid)
         {
-            *reinterpret_cast<uint16_t *>(buf->base) = utils::htons(fid);
+            *reinterpret_cast<uint16_t *>(buf->base) = utils::host_to_net_16(fid);
         }
     };
 
@@ -101,7 +101,7 @@ namespace objects
 
         forward_response(request *req) : response(req)
         {
-            origin_id = utils::htons(*reinterpret_cast<uint16_t *>(req->buf->base));
+            origin_id = utils::host_to_net_16(*reinterpret_cast<uint16_t *>(req->buf->base));
         }
 
         void set_forward_id(uint16_t fid)

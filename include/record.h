@@ -29,12 +29,12 @@ class ip_address
 public:
     void reset(uint32_t ip)
     {
-        address_ = utils::htonl(ip);
+        address_ = utils::host_to_net_32(ip);
     }
 
     ip_address(const ip_address &ip) : address_(ip.address_) {}
 
-    explicit ip_address(uint32_t ip) : address_(utils::htonl(ip)) {}
+    explicit ip_address(uint32_t ip) : address_(utils::host_to_net_32(ip)) {}
 
     void to_string(string &) const;
 
@@ -43,7 +43,7 @@ public:
 
     bool operator==(uint32_t cmp) const
     {
-        return address_ == utils::htonl(cmp);
+        return address_ == utils::host_to_net_32(cmp);
     }
 
     bool operator==(const ip_address &cmp) const
@@ -53,7 +53,7 @@ public:
 
     uint32_t get_address() const
     {
-        return utils::ntohl(address_);
+        return utils::net_to_host_32(address_);
     }
 
     const uint8_t *get_value_address() const
@@ -93,7 +93,7 @@ class dns_value
         raw.ttl = v.raw.ttl;
         raw.length = v.raw.length;
 
-        length = utils::ntohs(raw.length);
+        length = utils::net_to_host_16(raw.length);
     }
 
 public:
@@ -112,7 +112,7 @@ public:
         raw.ttl = t;
         raw.length = length;
 
-        length = utils::ntohs(raw.length);
+        length = utils::net_to_host_16(raw.length);
 
         this->data = new uint8_t[length];
         memmove(this->data, v, length);
@@ -134,7 +134,7 @@ public:
     void operator=(const dns_value &v)
     {
         simple_copy(v);
-        auto l = utils::ntohs(raw.length);
+        auto l = utils::net_to_host_16(raw.length);
         this->data = new uint8_t[l];
         memmove(this->data, v.data, l);
 
@@ -170,7 +170,7 @@ public:
 
     uint32_t set_expired(time_t current, uint32_t ttl)
     {
-        auto attl = std::max(utils::ntohl(raw.ttl), ttl);
+        auto attl = std::max(utils::net_to_host_32(raw.ttl), ttl);
         expire_time = current + attl;
         return attl;
     }
