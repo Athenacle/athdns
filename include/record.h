@@ -64,25 +64,31 @@ public:
 
 class hash_node;
 
-class __attribute__((packed)) dns_value
+class dns_value
 {
-    //NOTE: all data are stored as NET order.
-    uint16_t name;
-    uint16_t type;
-    uint16_t clazz;
-    // here should no padding
-    uint32_t ttl;
-    uint16_t length;
+    struct __attribute__((packed)) __raw {
+        //NOTE: all data are stored as NET order.
+        uint16_t name;
+        uint16_t type;
+        uint16_t clazz;
+        // here should no padding
+        uint32_t ttl;
+        uint16_t length;
+    };
+
+    static_assert(sizeof(__raw) == (12), "dns_value size error, should be 12B");
+
+    __raw raw;
 
     uint8_t *data;
 
     void simple_copy(const dns_value &v)
     {
-        name = v.name;
-        type = v.type;
-        clazz = v.clazz;
-        ttl = v.ttl;
-        length = v.length;
+        raw.name = v.raw.name;
+        raw.type = v.raw.type;
+        raw.clazz = v.raw.clazz;
+        raw.ttl = v.raw.ttl;
+        raw.length = v.raw.length;
     }
 
 public:
@@ -90,12 +96,17 @@ public:
 
     size_t get_rdata_size()
     {
-        return 12 + utils::ntohs(length);
+        return 12 + utils::ntohs(raw.length);
     }
 
     dns_value(uint16_t name, uint16_t type, uint16_t clazz, uint32_t t, uint16_t length, uint8_t *v)
-        : name(name), type(type), clazz(clazz), ttl(t), length(length)
     {
+        raw.name = name;
+        raw.type = type;
+        raw.clazz = clazz;
+        raw.ttl = t;
+        raw.length = length;
+
         auto l = utils::ntohs(length);
         this->data = new uint8_t[l];
         memmove(this->data, v, l);
@@ -116,7 +127,7 @@ public:
     void operator=(const dns_value &v)
     {
         simple_copy(v);
-        auto l = utils::ntohs(length);
+        auto l = utils::ntohs(raw.length);
         this->data = new uint8_t[l];
         memmove(this->data, v.data, l);
     }
@@ -135,12 +146,12 @@ public:
 
     uint16_t get_type() const
     {
-        return type;
+        return raw.type;
     }
 
     uint16_t get_ttl() const
     {
-        return ttl;
+        return raw.ttl;
     }
 
     uint8_t *get_data() const
@@ -151,10 +162,6 @@ public:
 
 class record_node
 {
-    static_assert(sizeof(dns_value) == (12 + sizeof(uint8_t *)),
-                  "dns_value size error, should be 20B (on 64bit system) "
-                  "or 16B (on 32bit)");
-
     friend class hash_node;
     friend class dns_package_builder;
     friend class hash::hashtable;
