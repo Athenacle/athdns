@@ -180,8 +180,6 @@ void global_server::init_server_loop()
 
     status = uv_async_init(uv_main_loop, sending_response_works, async_work_sending_response_cb);
     utils::check_uv_return_status(status, "init async send");
-    uv_timer_init(uv_main_loop, &current_time_timer);
-    utils::check_uv_return_status(status, "current_timer");
 }
 
 void global_server::set_static_ip(const string&, uint32_t)
@@ -220,7 +218,7 @@ void global_server::init_local_udp_server()
             upstream_nameservers[i]->set_index(i);
         }
     }
-    current_time_timer.data = &current_time;
+
 #ifdef HAVE_DOH_SUPPORT
     init_ssl_libraries();
 #endif
@@ -248,15 +246,6 @@ void global_server::start_local_udp_server()
         ns->start_upstream();
     }
 
-    static const auto& current_time_timer_func = [](uv_timer_t* p) {
-        static auto ct = reinterpret_cast<utils::atomic_number<time_t>*>(p->data);
-        static utils::atomic_int count(0);
-        if (unlikely(count++ % 600 == 0)) {
-            ct->reset(time(nullptr));
-        } else {
-            ct->operator++();
-        }
-    };
     static const auto& report_func = [](uv_timer_t*) {
         static auto& server = global_server::get_server();
         int forward = server.get_total_forward_cound();
@@ -278,12 +267,15 @@ void global_server::start_local_udp_server()
     };
     int reportt = timer_timeout * 1000;
 
-    uv_timer_start(&reporter_timer, report_func, reportt, reportt);
-    uv_timer_start(&current_time_timer, current_time_timer_func, 1000, 1000);
+
     for (auto& listen : listen_address) {
         uv_udp_recv_start(
             std::get<3>(listen), uvcb_server_incoming_alloc, uvcb_server_incoming_recv);
     }
+
+    requery_worker.start_requery();
+
+    uv_timer_start(&reporter_timer, report_func, reportt, reportt);
 
     uv_run(uv_main_loop, UV_RUN_DEFAULT);
 }
@@ -505,10 +497,61 @@ void global_server::init_ssl_libraries()
 #endif
 }
 
-void global_server::destroy_ssl_libraries()
-{
+void global_server::destroy_ssl_libraries(){
 #ifdef HAVE_DOH_SUPPORT
 #ifdef HAVE_OPENSSL
 #endif
 #endif
+}
+
+/// requery
+
+requery::requery()
+{
+    loop = new uv_loop_t;
+    async_stop = new uv_async_t;
+    current_time_timer = new uv_timer_t;
+
+    uv_loop_init(loop);
+
+    async_stop->data = this;
+    current_time_timer->data = &current_time;
+}
+
+requery::~requery()
+{
+    delete async_stop;
+    delete current_time_timer;
+}
+
+namespace
+{
+    void current_time_timer_func(uv_timer_t* p)
+    {
+        static auto ct = reinterpret_cast<utils::atomic_number<time_t>*>(p->data);
+        static utils::atomic_int count(0);
+        if (unlikely(count++ % 300 == 0)) {
+            ct->reset(time(nullptr));
+        } else {
+            ct->operator++();
+        }
+    }
+
+}  // namespace
+
+void requery::start_requery()
+{
+    uv_timer_init(loop, current_time_timer);
+
+    uv_timer_start(current_time_timer, current_time_timer_func, 1000, 1000);
+
+    pthread_create(&thread,
+                   nullptr,
+                   [](void* __loop) -> void* {
+                       pthread_setname_np(pthread_self(), "requery");
+                       auto loop = reinterpret_cast<uv_loop_t*>(__loop);
+                       uv_run(loop, UV_RUN_DEFAULT);
+                       return nullptr;
+                   },
+                   loop);
 }

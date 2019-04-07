@@ -32,6 +32,30 @@ void uvcb_async_response_send(uv_async_t *);
 
 void uvcb_async_remote_response_send(uv_async_t *);
 
+class requery
+{
+    uv_loop_t *loop;
+
+    uv_async_t *async_stop;
+    uv_timer_t *current_time_timer;
+
+    pthread_t thread;
+
+    utils::atomic_number<time_t> current_time;
+
+public:
+    requery();
+    ~requery();
+
+    void start_requery();
+    void stop_requery();
+
+    time_t get_current_time() const
+    {
+        return current_time;
+    }
+};
+
 class global_server
 {
     friend void uvcb_async_response_send(uv_async_t *);
@@ -61,7 +85,6 @@ class global_server
 
     utils::atomic_int total_request_count;
     utils::atomic_int total_request_forward_count;
-    utils::atomic_number<time_t> current_time;
 
     int default_ttl;
     int timer_timeout;
@@ -76,7 +99,6 @@ class global_server
     uv_async_t *async_works;
     uv_async_t *sending_response_works;
 
-    uv_timer_t current_time_timer;
     uv_timer_t reporter_timer;
 
     pthread_spinlock_t forward_table_lock;
@@ -84,6 +106,8 @@ class global_server
     sem_t queue_sem;
 
     int forward_type;
+
+    requery requery_worker;
 
 #ifdef HAVE_DOH_SUPPORT
     pthread_mutex_t *sync_query_mutex;
@@ -256,7 +280,7 @@ public:
 
     time_t get_current_time() const
     {
-        return current_time;
+        return requery_worker.get_current_time();
     }
 
     void config_listen_at(const char *, uint16_t);
