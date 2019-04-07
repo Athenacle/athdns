@@ -34,14 +34,24 @@ void uvcb_async_remote_response_send(uv_async_t *);
 
 class requery
 {
+public:
+    enum class operation { add, remove };
+
+private:
     uv_loop_t *loop;
 
     uv_async_t *async_stop;
     uv_timer_t *current_time_timer;
 
+    uv_async_t *async_ctl;
+
     pthread_t thread;
 
     utils::atomic_number<time_t> current_time;
+
+    std::queue<std::tuple<uv_timer_t *, uint32_t, operation>> insert_queue;
+
+    pthread_mutex_t *queue_mutex;
 
 public:
     requery();
@@ -49,6 +59,8 @@ public:
 
     void start_requery();
     void stop_requery();
+
+    void ctl_timer(uv_timer_t *, uint32_t, operation);
 
     time_t get_current_time() const
     {
@@ -108,6 +120,9 @@ class global_server
     int forward_type;
 
     requery requery_worker;
+
+    std::queue<dns::dns_packet *> requery_queue;
+    pthread_mutex_t *requery_mutex;
 
 #ifdef HAVE_DOH_SUPPORT
     pthread_mutex_t *sync_query_mutex;
@@ -276,7 +291,7 @@ public:
 
     void response_from_remote(uv_buf_t *, remote::abstract_nameserver *);
 
-    void cache_add_node(record_node *);
+    hash::hashtable::result cache_add_node(record_node *);
 
     time_t get_current_time() const
     {
@@ -284,6 +299,11 @@ public:
     }
 
     void config_listen_at(const char *, uint16_t);
+
+    requery &get_requery_worker()
+    {
+        return requery_worker;
+    }
 
 #ifdef HAVE_DOH_SUPPORT
     ip_address *sync_internal_query_A(const char *);

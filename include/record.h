@@ -81,6 +81,7 @@ class dns_value
     __raw raw;
 
     uint16_t length;
+    time_t expire_time;
 
     uint8_t *data;
 
@@ -157,7 +158,7 @@ public:
         return raw.type;
     }
 
-    uint16_t get_ttl() const
+    uint32_t get_ttl() const
     {
         return raw.ttl;
     }
@@ -165,6 +166,13 @@ public:
     uint8_t *get_data() const
     {
         return data;
+    }
+
+    uint32_t set_expired(time_t current, uint32_t ttl)
+    {
+        auto attl = std::max(utils::ntohl(raw.ttl), ttl);
+        expire_time = current + attl;
+        return attl;
     }
 };
 
@@ -182,9 +190,20 @@ class record_node
     dns_value *answer;
     dns_value *authority;
 
+    uint32_t ttl;
+    time_t expire_time;
+
+    uv_timer_t *timer;
+
 public:
+    void do_requery();
+
     void set_answers(std::vector<dns_value> &);
     void set_authority_answers(std::vector<dns_value> &);
+
+    void start_requery(requery &);
+
+    void setup_ttl(uint32_t, time_t);
 
     uint32_t get_answer_count() const
     {
@@ -223,6 +242,11 @@ public:
     ip_address *get_record_A() const;
 
     void swap_A();
+
+    time_t get_expire_time() const
+    {
+        return expire_time;
+    }
 };
 
 class hash_node

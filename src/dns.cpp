@@ -11,7 +11,11 @@
 // dns.cpp: DNS parser implements
 
 #include "dns.h"
+#include "remote.h"
+#include "server.h"
 #include "utils.h"
+
+#include "logging.h"
 
 #include <algorithm>
 #include <cassert>
@@ -697,8 +701,13 @@ uint8_t* dns_value::to_data(uint8_t* p) const
 {
     const auto raw_size = sizeof(raw);
 
+    auto t = global_server::get_server().get_current_time();
+
     memmove(p, &raw, raw_size);
     memmove(p + raw_size, data, length);
+
+    uint32_t* ttlp = reinterpret_cast<uint32_t*>(p + 6);
+    *ttlp = utils::htonl(expire_time - t);
     return p + raw_size + length;
 }
 
@@ -764,6 +773,12 @@ record_node::~record_node()
     if (name != nullptr) {
         delete[] name;
     }
+    if (timer != nullptr) {
+        global_server::get_server().get_requery_worker().ctl_timer(
+            timer, 0, requery::operation::remove);
+        delete timer;
+    }
+
     delete[] answer;
     delete[] authority;
 }
@@ -810,4 +825,42 @@ void record_node::swap_A()
 bool record_node::operator==(domain_name dn) const
 {
     return utils::str_equal(dn, name);
+}
+
+void record_node::setup_ttl(uint32_t ttl, time_t ct)
+{
+    uint32_t attl = -1u;
+    for (int i = 0; i < answer_count; i++) {
+        attl = std::min(answer[i].set_expired(ct, ttl), attl);
+    }
+
+    for (int i = 0; i < authority_count; i++) {
+        attl = std::min(authority[i].set_expired(ct, ttl), attl);
+    }
+
+    this->ttl = attl;
+    this->expire_time = ct + attl;
+}
+
+void record_node::start_requery(requery& re)
+{
+    timer = new uv_timer_t;
+    timer->data = this;
+    re.ctl_timer(timer, ttl, requery::operation::add);
+}
+
+void record_node::do_requery()
+{
+    DTRACE("do requery {0}", get_name());
+    dns::dns_package_builder builder;
+    builder.basic_query_package(builder, get_name());
+    auto pack = builder.build();
+    pack->parse();
+    auto req = new objects::request(pack);
+    uv_buf_t* buf = global_server::get_server().new_uv_buf_t();
+    buf->base = reinterpret_cast<char*>(pack->get_data());
+    buf->len = pack->get_size();
+    req->buf = buf;
+    auto item = new objects::forward_response(req);
+    global_server::get_server().forward_item_submit(item);
 }

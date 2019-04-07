@@ -117,10 +117,12 @@ namespace hash
 
     private:
     public:
+        enum class result { insert, update, no_op };
+
         hashtable(size_type size);
         ~hashtable();
 
-        bool put(record_node *);
+        result put(record_node *);
 
         pointer get(const string &);
         pointer get(domain_name);

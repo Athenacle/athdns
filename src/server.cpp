@@ -149,6 +149,7 @@ void global_server::init_server_loop()
         for (auto& ns : server->upstream_nameservers) {
             ns->stop_upstream();
         }
+        server->requery_worker.stop_requery();
     };
 
     static const auto& async_work_sending_response_cb = [](uv_async_t*) {
@@ -444,33 +445,50 @@ void global_server::response_from_remote(uv_buf_t* buf, remote::abstract_nameser
         delete_uv_buf_t(buf);
     } else {
         const static shared_ptr<forward_response> empty(nullptr);
-        shared_ptr<forward_response> pointer = req->second;
+        auto resp = req->second;
         forward_table.erase(req);
         pthread_spin_unlock(&forward_table_lock);
         dns_packet* pack = dns_packet::fromDataBuffer(buf);
         pack->parse();
         record_node* node = pack->generate_record_node();
-        cache_add_node(node);
+
+        auto result = cache_add_node(node);
+        if (result == hashtable::result::update) {
+            return;
+        }
+
         delete pack;
+
+        shared_ptr<forward_response> pointer = std::move(resp);
+
         pointer->set_response(buf->base, buf->len);
+
 #ifdef HAVE_DOH_SUPPORT
         if (likely(pointer->get_sock() != nullptr)) {
 #endif
             send_response(std::move(pointer));
 #ifdef HAVE_DOH_SUPPORT
+
         } else {
             delete_uv_buf_t(buf);
             pthread_barrier_wait(internal_barrier);
         }
+
 #endif
     }
 }
 
-void global_server::cache_add_node(record_node* node)
+hashtable::result global_server::cache_add_node(record_node* node)
 {
+    hashtable::result ret = hashtable::result::no_op;
     if (table != nullptr) {
-        table->put(node);
+        ret = table->put(node);
+        if (ret == hashtable::result::insert || ret == hashtable::result::update) {
+            node->setup_ttl(default_ttl, get_current_time());
+            node->start_requery(requery_worker);
+        }
     }
+    return ret;
 }
 
 void global_server::config_listen_at(const char* ip, uint16_t port)
@@ -511,10 +529,16 @@ requery::requery()
     loop = new uv_loop_t;
     async_stop = new uv_async_t;
     current_time_timer = new uv_timer_t;
+    async_ctl = new uv_async_t;
+
+    queue_mutex = new pthread_mutex_t;
+    pthread_mutex_init(queue_mutex, nullptr);
 
     uv_loop_init(loop);
 
     async_stop->data = this;
+    async_ctl->data = this;
+
     current_time_timer->data = &current_time;
 }
 
@@ -522,6 +546,9 @@ requery::~requery()
 {
     delete async_stop;
     delete current_time_timer;
+    delete loop;
+    pthread_mutex_destroy(queue_mutex);
+    delete queue_mutex;
 }
 
 namespace
@@ -541,6 +568,37 @@ namespace
 
 void requery::start_requery()
 {
+    uv_async_init(loop, async_ctl, [](uv_async_t* async) {
+        auto req = reinterpret_cast<requery*>(async->data);
+        pthread_mutex_lock(req->queue_mutex);
+        while (req->insert_queue.size() > 0) {
+            auto front = req->insert_queue.front();
+            req->insert_queue.pop();
+            uv_timer_t* t = std::get<0>(front);
+            auto op = std::get<2>(front);
+            if (op == operation::add) {
+                uv_timer_init(req->loop, t);
+
+                DTRACE("set timer {0} to ttl {1}",
+                       reinterpret_cast<record_node*>(t->data)->get_name(),
+                       std::get<1>(front));
+
+                uv_timer_start(t,
+                               [](uv_timer_t* t) {
+                                   record_node* n = reinterpret_cast<record_node*>(t->data);
+                                   TRACE("timeout for node {0}", n->get_name());
+                                   n->do_requery();
+                               },
+                               std::get<1>(front) * 1000,
+                               0);
+
+            } else if (op == operation::remove) {
+                uv_timer_stop(t);
+            }
+        }
+        pthread_mutex_unlock(req->queue_mutex);
+    });
+
     uv_timer_init(loop, current_time_timer);
 
     uv_timer_start(current_time_timer, current_time_timer_func, 1000, 1000);
@@ -554,4 +612,22 @@ void requery::start_requery()
                        return nullptr;
                    },
                    loop);
+}
+
+void requery::ctl_timer(uv_timer_t* timer, uint32_t timeout, operation op)
+{
+    pthread_mutex_lock(queue_mutex);
+    insert_queue.emplace(timer, timeout, op);
+    pthread_mutex_unlock(queue_mutex);
+    uv_async_send(async_ctl);
+}
+
+void requery::stop_requery()
+{
+    static const auto& stop_cb = [](uv_handle_t* t, void*) { uv_close(t, nullptr); };
+
+    uv_timer_stop(current_time_timer);
+    uv_stop(loop);
+    uv_walk(loop, stop_cb, nullptr);
+    pthread_join(thread, nullptr);
 }
