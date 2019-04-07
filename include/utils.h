@@ -419,7 +419,7 @@ namespace utils
     }
 #endif
 
-    constexpr uint16_t ntohs(uint16_t data)
+    constexpr uint16_t net_to_host_16(uint16_t data)
     {
 #ifdef LITTLE_ENDIAN
         return swap_16(data);
@@ -428,7 +428,7 @@ namespace utils
 #endif
     }
 
-    constexpr uint32_t ntohl(uint32_t data)
+    constexpr uint32_t net_to_host_32(uint32_t data)
     {
 #ifdef LITTLE_ENDIAN
         return swap_32(data);
@@ -437,7 +437,7 @@ namespace utils
 #endif
     }
 
-    constexpr uint16_t htons(uint16_t data)
+    constexpr uint16_t host_to_net_16(uint16_t data)
     {
 #ifdef LITTLE_ENDIAN
         return swap_16(data);
@@ -446,7 +446,7 @@ namespace utils
 #endif
     }
 
-    constexpr uint32_t htonl(uint32_t data)
+    constexpr uint32_t host_to_net_32(uint32_t data)
     {
 #ifdef LITTLE_ENDIAN
         return swap_32(data);

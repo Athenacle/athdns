@@ -13,6 +13,7 @@
 #include "test.h"
 
 #include "dns.h"
+#include "server.h"
 
 using namespace dns;
 using namespace dns_utils;
@@ -39,6 +40,8 @@ TEST(DNS_record, to_data_1)
     pack->parse();
 
     record_node *node = pack->generate_record_node();
+
+    node->setup_ttl(0, global_server::get_server().get_current_time());
 
     dns_package_builder builder;
     builder.as_response().set_query(pack->getQuery());
@@ -78,6 +81,8 @@ TEST(DNS_record, to_data_2)
     dns_packet *pack = dns_packet::fromDataBuffer(packet_bytes, sizeof(packet_bytes));
     pack->parse();
     record_node *node = pack->generate_record_node();
+
+    node->setup_ttl(0, global_server::get_server().get_current_time());
 
     dns_package_builder builder;
     builder.as_response().set_query(pack->getQuery()).add_record(node);
@@ -132,6 +137,7 @@ namespace
         ASSERT_EQ(count, 6);
         record_node node("test.");
         node.set_answers(ves);
+        node.setup_ttl(0, global_server::get_server().get_current_time());
 
         uint32_t ips[] = {0x01020301,
                           0x01020306,
@@ -165,6 +171,7 @@ namespace
         ASSERT_TRUE(ves.size() == 2);
         record_node n("test");
         n.set_answers(ves);
+        n.setup_ttl(0, global_server::get_server().get_current_time());
 
         uint8_t buffer[sizeof(data) - 1];
 
@@ -191,6 +198,7 @@ namespace
         ASSERT_TRUE(ves.size() == 4);
         record_node n("test");
         n.set_answers(ves);
+        n.setup_ttl(0, global_server::get_server().get_current_time());
 
         uint32_t ips[] = {0x01020301, 0x01020302};
 

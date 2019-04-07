@@ -261,7 +261,7 @@ request::~request()
 void forward_response::set_response(char* base, uint32_t size)
 {
     response::set_response(base, size);
-    *reinterpret_cast<uint16_t*>(response_buffer->base) = utils::htons(origin_id);
+    *reinterpret_cast<uint16_t*>(response_buffer->base) = utils::host_to_net_16(origin_id);
 }
 
 // forward response
